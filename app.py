@@ -11,8 +11,7 @@ from PIL import Image
 # Defensive imports
 try:
     from rdkit import Chem
-    from rdkit.Chem import Draw, Lipinski, Descriptors
-    from rdkit.Chem import rdMolDescriptors
+    from rdkit.Chem import Draw, Lipinski
 except Exception as e:
     st.error(f"RDKit import failed: {e}")
     raise
@@ -21,6 +20,7 @@ try:
     from mordred import Calculator, descriptors
 except Exception as e:
     st.warning(f"Mordred import warning: {e}")
+    # We'll continue but Mordred features may be unavailable
     Calculator = None
     descriptors = None
 
@@ -133,51 +133,10 @@ def validate_smiles(smiles: str) -> bool:
     except Exception:
         return False
 
-def calculate_advanced_descriptors(mol):
-    """Calculate advanced descriptors using RDKit and Mordred that can replace PaDEL descriptors"""
-    desc_dict = {}
-    
-    try:
-        # Calculate topological descriptors (similar to ATSC descriptors)
-        # These approximate PaDEL's ATSC descriptors
-        if mol is not None:
-            # Get molecule properties
-            num_atoms = mol.GetNumAtoms()
-            num_bonds = mol.GetNumBonds()
-            num_rotatable_bonds = Descriptors.NumRotatableBonds(mol)
-            num_heavy_atoms = mol.GetNumHeavyAtoms()
-            
-            # Calculate some topological indices
-            try:
-                chi_indices = []
-                for i in range(6):
-                    try:
-                        chi = rdMolDescriptors.CalcChiNv(mol, i+1)
-                        chi_indices.append(chi)
-                    except:
-                        chi_indices.append(0.0)
-                
-                # Add topological descriptors
-                desc_dict['Topological_Complexity'] = float(num_atoms * num_bonds) / 100.0
-                desc_dict['Molecular_Flexibility'] = float(num_rotatable_bonds) / num_heavy_atoms if num_heavy_atoms > 0 else 0.0
-                desc_dict['Chi_Index_1'] = chi_indices[0] if len(chi_indices) > 0 else 0.0
-                desc_dict['Chi_Index_2'] = chi_indices[1] if len(chi_indices) > 1 else 0.0
-                
-            except Exception as e:
-                st.warning(f"Some topological descriptors failed: {e}")
-                
-    except Exception as e:
-        st.warning(f"Advanced descriptor calculation had some issues: {e}")
-    
-    return desc_dict
-
 def calculate_selected_descriptors(smiles: str, features: list) -> pd.DataFrame:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return None
-
-    # Calculate advanced descriptors first
-    advanced_dict = calculate_advanced_descriptors(mol)
 
     mordred_dict = {}
     if Calculator is not None and descriptors is not None:
@@ -198,58 +157,29 @@ def calculate_selected_descriptors(smiles: str, features: list) -> pd.DataFrame:
             st.warning(f"Mordred calculation failed: {e}")
             mordred_dict = {}
 
-    # RDKit descriptors
+    # RDKit fallback for some features
     rdkit_dict = {}
     try:
-        # Basic descriptors
         rdkit_dict["nHBAcc_Lipinski"] = float(Lipinski.NumHAcceptors(mol))
-        rdkit_dict["nHBDon_Lipinski"] = float(Lipinski.NumHDonors(mol))
-        rdkit_dict["MolWt"] = float(Descriptors.MolWt(mol))
-        rdkit_dict["MolLogP"] = float(Descriptors.MolLogP(mol))
-        rdkit_dict["NumRotatableBonds"] = float(Descriptors.NumRotatableBonds(mol))
-        rdkit_dict["TPSA"] = float(Descriptors.TPSA(mol))
-        rdkit_dict["NumHeteroatoms"] = float(Descriptors.NumHeteroatoms(mol))
-        
-        # Additional important descriptors
-        rdkit_dict["FractionCSP3"] = float(Descriptors.FractionCSP3(mol))
-        rdkit_dict["NumAromaticRings"] = float(Descriptors.NumAromaticRings(mol))
-        rdkit_dict["NumAliphaticRings"] = float(Descriptors.NumAliphaticRings(mol))
-        
-    except Exception as e:
-        st.warning(f"Some RDKit descriptors failed: {e}")
+    except Exception:
+        pass
 
     feature_values = {}
     for feat in features:
-        # Priority: Advanced > Mordred > RDKit > heuristic
-        if feat in advanced_dict:
-            feature_values[feat] = advanced_dict.get(feat, 0.0)
-        elif feat in mordred_dict:
+        if feat in mordred_dict:
             feature_values[feat] = mordred_dict.get(feat, 0.0)
         elif feat in rdkit_dict:
             feature_values[feat] = rdkit_dict.get(feat, 0.0)
         else:
-            # Handle atom counts and other simple features
+            # simple heuristic for atom counts like nN, nO, nCl etc.
             try:
-                if isinstance(feat, str):
-                    # Handle nX patterns (atom counts)
-                    if feat.startswith('n') and len(feat) <= 4:
-                        symbol = feat[1:]
-                        count = sum(1 for a in mol.GetAtoms() if a.GetSymbol().lower() == symbol.lower())
-                        feature_values[feat] = float(count)
-                    
-                    # Handle other common descriptor patterns
-                    elif 'ATSC' in feat:
-                        # Approximate ATSC descriptors with topological complexity
-                        feature_values[feat] = advanced_dict.get('Topological_Complexity', 0.0)
-                    
-                    elif 'BCUT' in feat:
-                        # Approximate BCUT with molecular weight normalized
-                        feature_values[feat] = rdkit_dict.get('MolWt', 0.0) / 1000.0
-                    
-                    else:
-                        # For other descriptors, set to 0.0
-                        feature_values[feat] = 0.0
+                if isinstance(feat, str) and feat.startswith('n') and len(feat) <= 4:
+                    symbol = feat[1:]
+                    # handle multi-letter elements like Cl, Br
+                    count = sum(1 for a in mol.GetAtoms() if a.GetSymbol().lower() == symbol.lower())
+                    feature_values[feat] = float(count)
                 else:
+                    # For other descriptors that Mordred couldn't calculate, set to 0.0
                     feature_values[feat] = 0.0
             except Exception:
                 feature_values[feat] = 0.0
@@ -315,16 +245,6 @@ with col2:
     st.markdown('<div class="main-header">SGLT2 Inhibitor Predictor</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Predict Molecular Activity Using Machine Learning</div>', unsafe_allow_html=True)
 
-# Display descriptor calculation methods
-st.sidebar.markdown("---")
-st.sidebar.subheader("Descriptor Methods")
-st.sidebar.info(f"""
-🧪 **Calculation Methods:**
-- ✅ RDKit: Basic & Advanced descriptors
-- {'✅' if Calculator else '❌'} Mordred: Comprehensive descriptors  
-- ✅ Custom: Advanced topological descriptors
-""")
-
 st.markdown("---")
 
 # -------------------- SIDEBAR INPUT --------------------
@@ -384,25 +304,19 @@ with col2:
         desc_df = calculate_selected_descriptors(smiles, model_features)
 
     if desc_df is None:
-        st.error("❌ Descriptor calculation failed. Check RDKit installation.")
+        st.error("❌ Descriptor calculation failed. Check Mordred/RDKit installation.")
         st.stop()
 
     # Show descriptors with status
     st.write("**Calculated Descriptors:**")
     desc_display = desc_df.T.rename(columns={0: 'Value'})
     desc_display['Status'] = ['⚠️' if x == 0.0 else '✅' for x in desc_display['Value']]
-    
     st.dataframe(desc_display, use_container_width=True)
 
-    # Calculate success rate
-    success_count = (desc_df.iloc[0] != 0.0).sum()
-    total_count = len(model_features)
-    success_rate = (success_count / total_count) * 100
-    
-    st.metric("Descriptor Calculation Success", f"{success_count}/{total_count}", f"{success_rate:.1f}%")
-
-    if success_rate < 70:
-        st.warning(f"⚠️ Only {success_rate:.1f}% of descriptors calculated successfully. Prediction accuracy may be affected.")
+    # Show warning if many descriptors are zero
+    zero_count = (desc_df.iloc[0] == 0.0).sum()
+    if zero_count > len(model_features) * 0.5:
+        st.warning(f"⚠️ {zero_count} descriptors calculated as zero. This may affect prediction accuracy.")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -555,6 +469,5 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666;'>
     <p>🧪 <strong>SGLT2 Inhibitor Prediction Tool</strong> | Built with Streamlit, RDKit, and Machine Learning</p>
-    <p><small>Note: Using RDKit and Mordred descriptors (Java/PaDEL not required)</small></p>
 </div>
 """, unsafe_allow_html=True)
