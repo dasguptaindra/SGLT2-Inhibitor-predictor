@@ -8,8 +8,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import tempfile
-import subprocess
-import sys
 
 # Defensive imports
 try:
@@ -33,7 +31,7 @@ except Exception as e:
     st.warning(f"SHAP import warning: {e}")
     shap = None
 
-# PaDEL descriptor calculation
+# PaDEL descriptor calculation - simplified approach
 try:
     from padelpy import padeldescriptor
     PADEL_AVAILABLE = True
@@ -145,25 +143,24 @@ def validate_smiles(smiles: str) -> bool:
         return False
 
 def calculate_padel_descriptors(smiles: str, required_features: list) -> dict:
-    """Calculate descriptors using PaDEL"""
+    """Calculate descriptors using PaDEL - Working version"""
     if not PADEL_AVAILABLE:
         return {}
         
     try:
         # Create temporary files
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.smi', delete=False) as smi_file:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.smi', delete=False, encoding='utf-8') as smi_file:
             smi_file.write(f"{smiles}\tmol1")
             smi_path = smi_file.name
         
         output_path = tempfile.mktemp(suffix='.csv')
         
-        # Calculate descriptors using PaDEL
+        # Use only compatible parameters
         padeldescriptor(
-            mol_dir=smi_path,
+            mol_file=smi_path,
             d_file=output_path,
-            descriptors=True,
-            fingerprints=False,
-            d_2d=True  # Only 2D descriptors
+            fingerprints=False,  # Only get descriptors, not fingerprints
+            threads=2
         )
         
         # Read and process results
@@ -187,8 +184,11 @@ def calculate_padel_descriptors(smiles: str, required_features: list) -> dict:
                     padel_dict[feature] = 0.0
             
             # Clean up temporary files
-            os.unlink(smi_path)
-            os.unlink(output_path)
+            try:
+                os.unlink(smi_path)
+                os.unlink(output_path)
+            except:
+                pass
             
             return padel_dict
         else:
@@ -239,6 +239,9 @@ def calculate_selected_descriptors(smiles: str, features: list) -> pd.DataFrame:
     rdkit_dict = {}
     try:
         rdkit_dict["nHBAcc_Lipinski"] = float(Lipinski.NumHAcceptors(mol))
+        rdkit_dict["nHBDon_Lipinski"] = float(Lipinski.NumHDonors(mol))
+        rdkit_dict["MolWt"] = float(Chem.rdMolDescriptors.CalcExactMolWt(mol))
+        rdkit_dict["MolLogP"] = float(Chem.Crippen.MolLogP(mol))
     except Exception:
         pass
 
@@ -407,7 +410,7 @@ with col2:
     for feat in desc_df.columns:
         if any(x in feat.lower() for x in ['atsc', 'bcut', 'vabc', 'petitjean', 'kappa']):
             sources.append('PaDEL' if desc_display.loc[feat, 'Value'] != 0.0 else 'Failed')
-        elif feat in ['nHBAcc_Lipinski']:
+        elif feat in ['nHBAcc_Lipinski', 'nHBDon_Lipinski', 'MolWt', 'MolLogP']:
             sources.append('RDKit')
         else:
             sources.append('Mordred' if desc_display.loc[feat, 'Value'] != 0.0 else 'Heuristic/Failed')
