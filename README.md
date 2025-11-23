@@ -1,8 +1,7 @@
-🚀 SGLT2 Inhibitor Activity Predictor
-🧪 ML-assisted Molecular Activity Prediction & SHAP Waterfall Visualization
-Welcome to the SGLT2 Inhibitor Predictor, a ML-based web application designed for researchers, medicinal chemists, pharmacologists, and drug developers 🎯
+🚀 **SGLT2 Inhibitor Activity Predictor**
+🧪** ML-assisted Molecular Activity Prediction & SHAP Waterfall Visualization**
+**Welcome to the SGLT2 Inhibitor Predictor, a ML-based web application designed for researchers, medicinal chemists, pharmacologists, and drug developers **🎯
 This tool allows users to predict whether a compound is Active or Inactive against SGLT2 simply by entering a SMILES string. Additionally, it provides an explainable AI interpretation using SHAP Waterfall plots, helping users understand which structural features contribute most to the predicted activity 📊
-________________________________________
 💡 Why Use This Tool?
 ✨ Easy to use - Input SMILES and get instant prediction
 🧠 AI-Driven Results - Predict SGLT2 inhibitory activity with a trained ML model
