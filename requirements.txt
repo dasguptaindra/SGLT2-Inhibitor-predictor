@@ -1,0 +1,10 @@
+python_version == 3.10
+streamlit>=1.28.0
+pandas>=1.5.0
+numpy>=1.21.0
+joblib>=1.2.0
+scikit-learn
+rdkit-pypi
+mordred>=1.2.0
+padelpy>=0.1.7
+streamlit-ketcher>=0.0.1
