@@ -7,5 +7,4 @@ matplotlib>=3.7.0
 mordred>=1.2.0
 padelpy>=0.1.7
 streamlit-ketcher>=0.0.1
-rdkit-pypi==2021.3.3
-
+rdkit-pypi>=2022.9.5
