@@ -112,7 +112,7 @@ st.markdown("""
 
 # -------------------- MODEL & FEATURES --------------------
 # UPDATED: Pointing to the Gradient Boosting model
-MODEL_PATH = "gradient_boosting_model.joblib"
+MODEL_PATH = "gradient_boosting_model_fixed.joblib"
 FEATURES_PATH = "model_features.json"
 
 if not os.path.exists(MODEL_PATH):
