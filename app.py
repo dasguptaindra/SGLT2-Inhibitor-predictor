@@ -39,7 +39,7 @@ except Exception:
 
 # -------------------- CONFIG --------------------
 st.set_page_config(
-    page_title="SGLT2 Inhibitor Predictor",
+    page_title="SGLT2 Inhibitor Predictor (GBM)",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -111,33 +111,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------- MODEL & FEATURES --------------------
-MODEL_PATH = "gradient_boosting_model.pkl"
+# UPDATED: Pointing to the Gradient Boosting model
+MODEL_PATH = "gradient_boosting_model.joblib"
 FEATURES_PATH = "model_features.json"
 
 if not os.path.exists(MODEL_PATH):
-    st.error(f"Model file not found: {MODEL_PATH}. Place your model file in the app directory.")
+    st.error(f"Model file not found: {MODEL_PATH}. Please run the save script and place the .joblib file in the app directory.")
     st.stop()
 
 if not os.path.exists(FEATURES_PATH):
-    st.error(f"Features file not found: {FEATURES_PATH}. Place your model_features.json in the app directory.")
+    st.error(f"Features file not found: {FEATURES_PATH}. Please run the save script and place model_features.json in the app directory.")
     st.stop()
 
-# Load the Gradient Boosting model
-try:
-    model = joblib.load(MODEL_PATH)
-    st.success("✅ Gradient Boosting model loaded successfully!")
-except Exception as e:
-    st.error(f"Error loading model: {e}")
-    st.stop()
-
-# Load features
-try:
-    with open(FEATURES_PATH, "r") as f:
-        model_features = json.load(f)
-    st.success(f"✅ Loaded {len(model_features)} model features")
-except Exception as e:
-    st.error(f"Error loading features: {e}")
-    st.stop()
+# Load Model and Features
+model = joblib.load(MODEL_PATH)
+with open(FEATURES_PATH, "r") as f:
+    model_features = json.load(f)
 
 # -------------------- HELPERS --------------------
 def validate_smiles(smiles: str) -> bool:
@@ -256,7 +245,7 @@ with col2:
     st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown('<div class="main-header">SGLT2 Inhibitor Predictor</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Predict Molecular Activity Using Gradient Boosting</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Gradient Boosting Model</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -350,7 +339,6 @@ with col2:
 if predict_clicked:
     with st.spinner("🤖 Making prediction..."):
         try:
-            # For Gradient Boosting Classifier
             pred = model.predict(desc_df)[0]
         except Exception as e:
             st.error(f"❌ Model prediction failed: {e}")
@@ -360,23 +348,16 @@ if predict_clicked:
         if hasattr(model, 'predict_proba'):
             try:
                 probs = model.predict_proba(desc_df)[0]
+                # GradientBoostingClassifier predict_proba returns (n_samples, n_classes)
                 if len(probs) == 2:
-                    # Binary classification
-                    prob = float(probs[1])  # Probability of class 1 (active)
+                    prob = float(probs[1])
                 else:
-                    # Multi-class or different setup
                     try:
-                        # Try to find the index of class 1 (active)
-                        if hasattr(model, 'classes_'):
-                            idx = list(model.classes_).index(1)
-                            prob = float(probs[idx])
-                        else:
-                            # If no classes attribute, use the second class as active
-                            prob = float(probs[1]) if len(probs) > 1 else float(probs[0])
+                        idx = list(model.classes_).index(1)
+                        prob = float(probs[idx])
                     except Exception:
-                        prob = float(probs[0])
-            except Exception as e:
-                st.warning(f"Probability calculation failed: {e}")
+                        prob = None
+            except Exception:
                 prob = None
 
     # Display prediction result
@@ -399,11 +380,10 @@ if predict_clicked:
     
     with col2:
         if prob is not None:
-            confidence_label = "High confidence" if prob > 0.7 else "Medium confidence" if prob > 0.5 else "Low confidence"
             st.metric(
                 label="**Confidence Score**",
                 value=f"{prob:.1%}",
-                delta=confidence_label
+                delta="High confidence" if prob > 0.7 else "Medium confidence" if prob > 0.5 else "Low confidence"
             )
         else:
             st.info("Probability not available for this model")
@@ -415,31 +395,32 @@ if predict_clicked:
         
         with st.spinner("🔍 Generating SHAP explanation..."):
             try:
-                # For Gradient Boosting models
+                # GradientBoostingClassifier is a tree model, so TreeExplainer works
                 explainer = shap.TreeExplainer(model)
                 shap_values = explainer.shap_values(desc_df)
                 expected_value = explainer.expected_value
 
-                # Handle different SHAP output formats for Gradient Boosting
+                # Handle different SHAP output formats for GBDT
                 if isinstance(shap_values, list):
-                    # Multi-class output
                     if len(shap_values) == 2:
-                        # Binary classification
-                        shap_val = shap_values[1][0]  # Get SHAP values for class 1
+                        shap_val = shap_values[1]
+                        if len(shap_val.shape) == 2:
+                            shap_val = shap_val[0]
                         base_value = expected_value[1] if hasattr(expected_value, '__len__') and len(expected_value) > 1 else expected_value
                     else:
-                        shap_val = shap_values[0][0]  # First class
+                        shap_val = shap_values[0]
+                        if len(shap_val.shape) == 2:
+                            shap_val = shap_val[0]
                         base_value = expected_value[0] if hasattr(expected_value, '__len__') else expected_value
                 else:
-                    # Single array output
                     if len(shap_values.shape) == 3:
-                        # Multi-class 3D array
                         shap_val = shap_values[0, :, 1] if shap_values.shape[2] > 1 else shap_values[0, :, 0]
                         base_value = expected_value[1] if hasattr(expected_value, '__len__') and len(expected_value) > 1 else expected_value
                     elif len(shap_values.shape) == 2:
-                        # 2D array
                         shap_val = shap_values[0]
                         base_value = expected_value
+                        if isinstance(base_value, (list, np.ndarray)) and len(base_value) == 1:
+                             base_value = base_value[0]
                     else:
                         st.error(f"Unexpected SHAP values shape: {shap_values.shape}")
                         shap_val = None
