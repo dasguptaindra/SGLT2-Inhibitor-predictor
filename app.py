@@ -7,6 +7,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+import pickle
 
 # Defensive imports
 try:
@@ -114,6 +115,39 @@ st.markdown("""
 MODEL_PATH = "GB_model.pkl"
 FEATURES_PATH = "model_features.json"
 
+def load_model_with_fallback(model_path):
+    """Try multiple methods to load the model file"""
+    try:
+        # First try: standard joblib load
+        model = joblib.load(model_path)
+        st.success("✅ Model loaded successfully with joblib")
+        return model
+    except Exception as e1:
+        st.warning(f"⚠️ Joblib load failed: {e1}")
+        st.info("🔄 Trying alternative loading methods...")
+        
+        try:
+            # Second try: pickle with encoding
+            with open(model_path, 'rb') as f:
+                model = pickle.load(f)
+            st.success("✅ Model loaded successfully with pickle")
+            return model
+        except Exception as e2:
+            st.warning(f"⚠️ Pickle load failed: {e2}")
+            
+            try:
+                # Third try: pickle with latin1 encoding (common fallback)
+                with open(model_path, 'rb') as f:
+                    model = pickle.load(f, encoding='latin1')
+                st.success("✅ Model loaded successfully with pickle (latin1 encoding)")
+                return model
+            except Exception as e3:
+                st.error(f"❌ All loading methods failed:")
+                st.error(f"Joblib error: {e1}")
+                st.error(f"Pickle error: {e2}")
+                st.error(f"Pickle with latin1 error: {e3}")
+                return None
+
 if not os.path.exists(MODEL_PATH):
     st.error(f"Model file not found: {MODEL_PATH}. Place your model file in the app directory.")
     st.stop()
@@ -122,9 +156,32 @@ if not os.path.exists(FEATURES_PATH):
     st.error(f"Features file not found: {FEATURES_PATH}. Place your model_features.json in the app directory.")
     st.stop()
 
-model = joblib.load(MODEL_PATH)
-with open(FEATURES_PATH, "r") as f:
-    model_features = json.load(f)
+# Load model with error handling
+with st.spinner("🔄 Loading machine learning model..."):
+    model = load_model_with_fallback(MODEL_PATH)
+
+if model is None:
+    st.error("""
+    ❌ Failed to load the model. This is usually due to:
+    - Version mismatch between scikit-learn versions
+    - Model trained in a different environment
+    - Corrupted model file
+    
+    **Possible solutions:**
+    1. Retrain the model in this environment
+    2. Use the same scikit-learn version for training and deployment
+    3. Try a different model format (e.g., ONNX)
+    """)
+    st.stop()
+
+# Load features
+try:
+    with open(FEATURES_PATH, "r") as f:
+        model_features = json.load(f)
+    st.success(f"✅ Loaded {len(model_features)} model features")
+except Exception as e:
+    st.error(f"❌ Failed to load features: {e}")
+    st.stop()
 
 # -------------------- HELPERS --------------------
 def validate_smiles(smiles: str) -> bool:
@@ -451,7 +508,7 @@ if predict_clicked:
                         shap.plots.waterfall(explanation, max_display=10, show=False)
                         plt.title("Top 10 Feature Contributions to Prediction", fontsize=14, fontweight='bold')
                         plt.tight_layout()
-                        st.pyplot(fig)
+                        st.pyplot(ffig)
                         plt.close()
                         
                     except Exception as e:
