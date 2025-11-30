@@ -111,7 +111,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------- MODEL & FEATURES --------------------
-MODEL_PATH = "GB_model.pkl"
+MODEL_PATH = "gradient_boost_model.pkl"
 FEATURES_PATH = "model_features.json"
 
 if not os.path.exists(MODEL_PATH):
