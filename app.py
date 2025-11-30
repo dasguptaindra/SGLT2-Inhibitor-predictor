@@ -148,7 +148,7 @@ st.markdown("""
 def load_model_with_fallback():
     """Load the trained model with multiple fallback strategies"""
     MODEL_PATHS = [
-        "gradient_boosting_model.joblib",
+        "gradient_boosting_model.pkl",
         "model.pkl",
         "sglt2_model.pkl",
         "random_forest_model.pkl"
