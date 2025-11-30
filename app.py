@@ -98,8 +98,12 @@ def calculate_selected_descriptors(smiles: str, features: list) -> pd.DataFrame:
             mordred_results = calc(mol)
             for k, v in mordred_results.items():
                 try:
-                    mordred_dict[str(k)] = float(v) if v is not None and str(v) != 'nan' else 0.0
-                except Exception:
+                    # Convert to float and handle NaN/None values
+                    if v is None or str(v) == 'nan' or str(v) == 'NaN':
+                        mordred_dict[str(k)] = 0.0
+                    else:
+                        mordred_dict[str(k)] = float(v)
+                except (ValueError, TypeError):
                     mordred_dict[str(k)] = 0.0
         except Exception as e:
             st.warning(f"Mordred calculation failed: {e}")
@@ -108,7 +112,7 @@ def calculate_selected_descriptors(smiles: str, features: list) -> pd.DataFrame:
     try:
         rdkit_dict["nHBAcc_Lipinski"] = float(Lipinski.NumHAcceptors(mol))
     except Exception:
-        pass
+        rdkit_dict["nHBAcc_Lipinski"] = 0.0
 
     feature_values = {}
     for feat in features:
@@ -128,7 +132,30 @@ def calculate_selected_descriptors(smiles: str, features: list) -> pd.DataFrame:
             except Exception:
                 feature_values[feat] = 0.0
 
-    return pd.DataFrame([feature_values], columns=features)
+    # Create DataFrame and ensure no NaN values remain
+    desc_df = pd.DataFrame([feature_values], columns=features)
+    
+    # Final check and cleanup of any remaining NaN/None/inf values
+    desc_df = desc_df.fillna(0.0)
+    desc_df = desc_df.replace([np.inf, -np.inf], 0.0)
+    
+    return desc_df
+
+def clean_dataframe_for_prediction(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure the dataframe has no NaN, None, or inf values before prediction."""
+    df_clean = df.copy()
+    
+    # Fill NaN/None values with 0
+    df_clean = df_clean.fillna(0.0)
+    
+    # Replace infinite values with 0
+    df_clean = df_clean.replace([np.inf, -np.inf], 0.0)
+    
+    # Ensure all values are numeric
+    for col in df_clean.columns:
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
+    
+    return df_clean
 
 def draw_molecule(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
@@ -226,6 +253,12 @@ with col2:
         st.error("❌ Descriptor calculation failed. Check Mordred/RDKit installation.")
         st.stop()
 
+    # Check for NaN values before displaying
+    nan_count = desc_df.isna().sum().sum()
+    if nan_count > 0:
+        st.warning(f"⚠️ Found {nan_count} NaN values in descriptors. These will be converted to 0 for prediction.")
+        desc_df = clean_dataframe_for_prediction(desc_df)
+
     st.write("**Calculated Descriptors:**")
     desc_display = desc_df.T.rename(columns={0: 'Value'})
     desc_display['Status'] = ['⚠️' if x == 0.0 else '✅' for x in desc_display['Value']]
@@ -248,10 +281,18 @@ with col2:
 if predict_clicked:
     with st.spinner("🤖 Making prediction..."):
         try:
-            pred = model.predict(desc_df)[0]
+            # Final data cleaning before prediction
+            desc_df_clean = clean_dataframe_for_prediction(desc_df)
+            
+            # Verify no NaN values remain
+            if desc_df_clean.isna().any().any():
+                st.error("❌ NaN values still present after cleaning. Cannot make prediction.")
+                st.stop()
+                
+            pred = model.predict(desc_df_clean)[0]
             prob = None
             if hasattr(model, 'predict_proba'):
-                probs = model.predict_proba(desc_df)[0]
+                probs = model.predict_proba(desc_df_clean)[0]
                 prob = float(probs[1]) if len(probs) == 2 else None
         except Exception as e:
             st.error(f"❌ Model prediction failed: {e}")
@@ -282,7 +323,7 @@ if predict_clicked:
         with st.spinner("🔍 Generating SHAP explanation..."):
             try:
                 explainer = shap.TreeExplainer(model)
-                shap_values = explainer.shap_values(desc_df)
+                shap_values = explainer.shap_values(desc_df_clean)
                 expected_value = explainer.expected_value
 
                 if isinstance(shap_values, list):
@@ -300,8 +341,8 @@ if predict_clicked:
                     explanation = shap.Explanation(
                         values=shap_val[:10],
                         base_values=base_value,
-                        data=desc_df.iloc[0].values[:10],
-                        feature_names=desc_df.columns[:10].tolist()
+                        data=desc_df_clean.iloc[0].values[:10],
+                        feature_names=desc_df_clean.columns[:10].tolist()
                     )
                     fig, ax = plt.subplots(figsize=(12, 8))
                     shap.plots.waterfall(explanation, show=False)
@@ -309,7 +350,7 @@ if predict_clicked:
                     plt.close()
                 except Exception:
                     st.warning("SHAP waterfall plot failed. Creating manual plot...")
-                    fig = create_manual_waterfall(shap_val, base_value, desc_df)
+                    fig = create_manual_waterfall(shap_val, base_value, desc_df_clean)
                     st.pyplot(fig)
                     plt.close()
             except Exception as e:
