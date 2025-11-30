@@ -1,8 +1,8 @@
 streamlit>=1.28.0
 pandas>=1.5.0
 numpy==1.24.3
-joblib>=1.2.0
-scikit-learn>=1.5.2
+joblib==1.2.0
+scikit-learn==1.5.2
 rdkit-pypi
 matplotlib>=3.7.0
 shap>=0.43.0
@@ -10,6 +10,9 @@ mordred>=1.2.0
 padelpy>=0.1.7
 streamlit-ketcher>=0.0.1
 Pillow>=9.0.0
+
+
+
 
 
 
