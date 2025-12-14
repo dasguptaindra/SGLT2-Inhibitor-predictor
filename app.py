@@ -53,45 +53,37 @@ def draw_molecule(smiles):
     mol = Chem.MolFromSmiles(smiles)
     return Draw.MolToImage(mol, size=(300, 300)) if mol else None
 
-
 def calculate_descriptors(smiles):
-    """Calculate Mordred descriptors with proper 3D support (fixes minaaN)."""
-
+    """
+    Calculate Mordred descriptors correctly (including MINaaN)
+    using pandas method to avoid 0-value issue.
+    """
     mol = Chem.MolFromSmiles(smiles)
     mol = Chem.AddHs(mol)
 
-    # ---- Generate 3D conformer ----
+    # ---- Generate 3D conformer (optional but ensures MINaaN works) ----
     AllChem.EmbedMolecule(mol, AllChem.ETKDG())
     AllChem.UFFOptimizeMolecule(mol)
 
-    # ---- Enable 3D descriptors ----
+    # ---- Mordred calculator ----
     calc = Calculator(descriptors, ignore_3D=False)
-    mordred_vals = calc(mol)
 
-    data = {}
-    failed = []
+    # ---- Compute descriptors as DataFrame ----
+    df = calc.pandas([mol])
+    df = df.apply(pd.to_numeric, errors="coerce")
 
-    for f in model_features:
-        try:
-            val = mordred_vals[f]
-            if val is None or np.isnan(val) or np.isinf(val):
-                data[f] = 0.0
-                failed.append(f)
-            else:
-                data[f] = float(val)
-        except Exception:
-            data[f] = 0.0
-            failed.append(f)
+    # ---- Reindex columns to exactly match model features ----
+    df = df.reindex(columns=model_features)
 
-    # ---- Explicit Lipinski descriptor ----
-    if "nHBAcc_Lipinski" in model_features:
-        data["nHBAcc_Lipinski"] = Lipinski.NumHAcceptors(mol)
+    # ---- Add Lipinski descriptor if used ----
+    if "nHBAcc_Lipinski" in df.columns:
+        df["nHBAcc_Lipinski"] = Lipinski.NumHAcceptors(mol)
 
-    if failed:
-        st.warning(f"⚠️ Descriptor calculation failed for: {failed}")
+    # ---- Handle NaN and infinite values ----
+    df = df.fillna(0)
+    df.replace([np.inf, -np.inf], 0, inplace=True)
 
-    return pd.DataFrame([data])
-
+    return df
 
 # ================= HEADER =================
 st.title("SGLT2i Predictor v1.0: Predict SGLT2 inhibitor(s)")
@@ -131,7 +123,10 @@ st.markdown("---")
 st.subheader("📊 Results")
 
 desc_df = calculate_descriptors(smiles)
-desc_df = desc_df.replace([np.inf, -np.inf], 0)
+
+# Optional: display MINaaN value to confirm
+if "MINaaN" in desc_df.columns:
+    st.write(f"✅ MINaaN descriptor value: {desc_df['MINaaN'].values[0]}")
 
 pred = model.predict(desc_df)[0]
 prob = model.predict_proba(desc_df)[0][1]
