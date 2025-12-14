@@ -1,7 +1,7 @@
 🚀 **SGLT2i Predictor**
 
 
-**Welcome to the SGLT2 Inhibitor Predictor, a ML-based web application designed for researchers, medicinal chemists, pharmacologists, and drug developers**🎯
+**Welcome to the SGLT2 Inhibitor Predictor, a ML-based web application designed for researchers, medicinal chemists, pharmacologists, and drug developers**
 
 
 💡 **Why Use This Tool**?
