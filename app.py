@@ -68,11 +68,11 @@ def calculate_descriptors(smiles):
     return pd.DataFrame([data]).fillna(0)
 
 # ================= HEADER =================
-st.title("SGLT2i Predictor v1.0")
+st.title("SGLT2i Predictor v1.0: Predict SGLT2 inhibitor(s)")
 
 with st.expander("What is SGLT2i Predictor?", expanded=True):
     st.write(
-        "**SGLT2i Predictor** predicts whether a molecule acts as an "
+        "**SGLT2i Predictor** allows user to predict the SGLT2 inhibitory activity of small molecules/drug molecules"
         "**SGLT2 inhibitor or non-inhibitor** using Machine learning model, "
         "and provides SHAP-based interpretability."
     )
