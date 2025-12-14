@@ -55,29 +55,27 @@ st.markdown("""
     .main { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; }
     
     /* Cards */
-    .card { background: white; border-radius: 20px; padding: 25px; margin-bottom: 20px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-left: 5px solid #667eea; }
+    .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 4px solid #667eea; }
     
     /* Headers */
     .main-header { 
         background: linear-gradient(90deg, #667eea, #764ba2);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-size: 2.8rem;
-        font-weight: 800;
+        font-size: 2.2rem;
+        font-weight: 700;
         text-align: center;
-        margin-bottom: 1rem;
-        padding: 10px;
+        margin-bottom: 0.5rem;
     }
     
     .section-header {
-        font-size: 1.8rem;
-        font-weight: 700;
+        font-size: 1.4rem;
+        font-weight: 600;
         color: #4a5568;
-        margin-bottom: 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        margin-bottom: 1rem;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e2e8f0;
     }
     
     /* Buttons */
@@ -85,40 +83,39 @@ st.markdown("""
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         font-weight: 600;
-        font-size: 1.1rem;
-        padding: 12px 30px;
-        border-radius: 50px;
+        padding: 10px 24px;
+        border-radius: 8px;
         border: none;
         transition: all 0.3s ease;
         width: 100%;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3);
     }
     
     .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
     }
     
     /* Metrics */
     .metric-card {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
         color: white;
-        border-radius: 15px;
-        padding: 20px;
+        border-radius: 10px;
+        padding: 15px;
         text-align: center;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        box-shadow: 0 3px 6px rgba(0,0,0,0.1);
     }
     
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
+        gap: 8px;
     }
     
     .stTabs [data-baseweb="tab"] {
-        background-color: #f7fafc;
-        border-radius: 10px 10px 0px 0px;
-        padding: 10px 20px;
-        font-weight: 600;
+        background-color: #f8fafc;
+        border-radius: 6px 6px 0px 0px;
+        padding: 8px 16px;
+        font-weight: 500;
     }
     
     .stTabs [aria-selected="true"] {
@@ -126,44 +123,19 @@ st.markdown("""
         color: white;
     }
     
-    /* Sidebar */
-    .css-1d391kg {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    }
-    
-    /* Progress bar */
-    .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, #667eea, #764ba2);
-    }
-    
-    /* Badges */
-    .badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        margin: 2px;
-    }
-    
-    .badge-success { background: #48bb78; color: white; }
-    .badge-warning { background: #ed8936; color: white; }
-    .badge-danger { background: #f56565; color: white; }
-    .badge-info { background: #4299e1; color: white; }
-    
     /* Custom scrollbar */
     ::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
     }
     
     ::-webkit-scrollbar-track {
         background: #f1f1f1;
-        border-radius: 10px;
+        border-radius: 6px;
     }
     
     ::-webkit-scrollbar-thumb {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
+        border-radius: 6px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -261,7 +233,7 @@ def clean_dataframe_for_prediction(df: pd.DataFrame) -> pd.DataFrame:
 def draw_molecule(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol:
-        return Draw.MolToImage(mol, size=(400, 400))
+        return Draw.MolToImage(mol, size=(350, 350))
     return None
 
 def create_gauge_chart(value, title, color_scheme="RdYlGn"):
@@ -270,7 +242,7 @@ def create_gauge_chart(value, title, color_scheme="RdYlGn"):
         mode="gauge+number+delta",
         value=value * 100,
         domain={'x': [0, 1], 'y': [0, 1]},
-        title={'text': title, 'font': {'size': 24}},
+        title={'text': title, 'font': {'size': 18}},
         delta={'reference': 50},
         gauge={
             'axis': {'range': [0, 100], 'tickwidth': 1},
@@ -281,79 +253,98 @@ def create_gauge_chart(value, title, color_scheme="RdYlGn"):
                 {'range': [70, 100], 'color': '#48bb78'}
             ],
             'threshold': {
-                'line': {'color': "black", 'width': 4},
+                'line': {'color': "black", 'width': 3},
                 'thickness': 0.75,
                 'value': value * 100
             }
         }
     ))
     fig.update_layout(
-        height=300,
-        margin=dict(l=20, r=20, t=50, b=20),
-        font={'color': "black", 'family': "Arial"}
+        height=250,
+        margin=dict(l=10, r=10, t=40, b=10),
+        font={'size': 12}
     )
     return fig
 
-def create_feature_importance_plot(shap_values, feature_names, top_n=15):
-    """Create an interactive feature importance plot."""
-    # Sort features by absolute SHAP value
-    idx = np.argsort(np.abs(shap_values))[::-1][:top_n]
-    sorted_features = [feature_names[i] for i in idx]
-    sorted_values = shap_values[idx]
+def create_shap_waterfall_plot(shap_values, expected_value, feature_names, max_display=10):
+    """Create a SHAP waterfall plot."""
+    # Get sorted indices by absolute SHAP value
+    sorted_idx = np.argsort(np.abs(shap_values))[::-1][:max_display]
+    sorted_shap = shap_values[sorted_idx]
+    sorted_features = [feature_names[i] for i in sorted_idx]
     
-    # Create color based on value
-    colors = ['#f56565' if v < 0 else '#48bb78' for v in sorted_values]
+    # Calculate cumulative values
+    cum_values = np.cumsum(np.insert(sorted_shap, 0, expected_value))
+    
+    # Colors
+    colors = []
+    for val in sorted_shap:
+        if val >= 0:
+            colors.append('#48bb78')  # Green
+        else:
+            colors.append('#f56565')  # Red
     
     fig = go.Figure()
+    
+    # Add bars for SHAP values
     fig.add_trace(go.Bar(
         y=sorted_features,
-        x=sorted_values,
+        x=sorted_shap,
         orientation='h',
         marker_color=colors,
-        hovertemplate='<b>%{y}</b><br>SHAP Value: %{x:.4f}<extra></extra>'
+        name='Feature Contribution',
+        hovertemplate='<b>%{y}</b><br>SHAP: %{x:.4f}<extra></extra>'
     ))
     
+    # Add expected value line
+    fig.add_shape(
+        type="line",
+        x0=expected_value, x1=expected_value,
+        y0=-0.5, y1=len(sorted_features)-0.5,
+        line=dict(color="black", width=2, dash="dash")
+    )
+    
     fig.update_layout(
-        title=f"Top {top_n} Most Important Features",
+        title=f"SHAP Waterfall Plot (Top {max_display} Features)",
         xaxis_title="SHAP Value (Impact on Prediction)",
         yaxis_title="Features",
-        height=500,
+        height=400,
         template="plotly_white",
         showlegend=False,
-        yaxis={'categoryorder': 'total ascending'}
+        bargap=0.2,
+        yaxis={'categoryorder': 'total ascending'},
+        plot_bgcolor='rgba(240,240,240,0.5)'
     )
     
     return fig
 
 # -------------------- HEADER --------------------
-col1, col2, col3 = st.columns([1, 3, 1])
-with col2:
-    st.markdown('<div class="main-header">🔬 SGLT2 Inhibitor Predictor</div>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #718096; font-size: 1.2rem; margin-top: -10px;">Predict SGLT2 inhibition activity using machine learning</p>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">SGLT2 Inhibitor Predictor</div>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center; color: #718096; font-size: 1rem; margin-bottom: 20px;">Predict SGLT2 inhibition activity using machine learning</p>', unsafe_allow_html=True)
 
 # Decorative separator
 st.markdown("""
-<div style="height: 3px; background: linear-gradient(90deg, transparent, #667eea, #764ba2, transparent); margin: 20px 0;"></div>
+<div style="height: 2px; background: linear-gradient(90deg, transparent, #667eea, #764ba2, transparent); margin: 10px 0 20px 0;"></div>
 """, unsafe_allow_html=True)
 
 # -------------------- SIDEBAR INPUT --------------------
 with st.sidebar:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('### 🎯 **Input Molecule**')
+    st.markdown('### **Input Molecule**')
     st.markdown('Enter your molecule structure to predict SGLT2 inhibition activity')
     
-    # Input mode selector with icons
+    # Input mode selector
     input_mode = st.radio(
         "**Select Input Method:**",
-        ["📝 SMILES String", "🎨 Draw Molecule"],
+        ["SMILES String", "Draw Molecule"],
         index=0
     )
     
-    if input_mode == "📝 SMILES String":
+    if input_mode == "SMILES String":
         smiles = st.text_area(
             "**SMILES Notation:**",
-            height=120,
-            placeholder="Enter SMILES here...\n\nExamples:\n• Aspirin: CC(=O)OC1=CC=CC=C1C(=O)O\n• Caffeine: CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
+            height=100,
+            placeholder="Enter SMILES here...\n\nExamples:\nAspirin: CC(=O)OC1=CC=CC=C1C(=O)O\nCaffeine: CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
             help="Enter the SMILES string of your molecule"
         )
     else:
@@ -361,26 +352,21 @@ with st.sidebar:
             st.markdown("**Draw your molecule below:**")
             smiles = st_ketcher("", key="ketcher")
         else:
-            st.warning("⚠️ **Ketcher not available**")
+            st.warning("Ketcher not available")
             st.info("Please install streamlit-ketcher or use SMILES input")
-            smiles = st.text_area("**SMILES Notation:**", height=120)
+            smiles = st.text_area("**SMILES Notation:**", height=100)
     
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Information card
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('### ℹ️ **About This Tool**')
+    st.markdown('### **About This Tool**')
     st.markdown("""
     This tool predicts **SGLT2 inhibition activity** using:
-    - **Gradient Boosting Model**
-    - **Molecular Descriptors** (Mordred & RDKit)
-    - **SHAP Explanations**
-    
-    **Models Used:**
-    <span class="badge badge-info">GBM Classifier</span>
-    <span class="badge badge-info">200+ Descriptors</span>
-    <span class="badge badge-info">SHAP Analysis</span>
-    """, unsafe_allow_html=True)
+    - Gradient Boosting Model
+    - Molecular Descriptors (Mordred & RDKit)
+    - SHAP Explanations
+    """)
     st.markdown('</div>', unsafe_allow_html=True)
 
 smiles = smiles.strip() if smiles else ""
@@ -392,22 +378,11 @@ if not smiles:
     with col2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown("""
-        <div style="text-align: center; padding: 40px 20px;">
-            <h1 style="color: #667eea; font-size: 3rem;">🔬</h1>
+        <div style="text-align: center; padding: 30px 20px;">
             <h2 style="color: #4a5568;">Welcome to SGLT2 Predictor</h2>
-            <p style="color: #718096; font-size: 1.1rem;">
-                👈 **Start by entering a SMILES string** or **drawing a molecule** in the sidebar
+            <p style="color: #718096;">
+                Start by entering a SMILES string or drawing a molecule in the sidebar
             </p>
-            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
-                        padding: 20px; border-radius: 15px; margin-top: 20px;">
-                <h3 style="color: white; margin: 0;">💡 Quick Tips</h3>
-                <ul style="color: white; text-align: left;">
-                    <li>Use valid SMILES notation</li>
-                    <li>Try example molecules</li>
-                    <li>Check descriptor calculation</li>
-                    <li>View SHAP explanations</li>
-                </ul>
-            </div>
         </div>
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -415,91 +390,58 @@ if not smiles:
 
 if not validate_smiles(smiles):
     st.error("""
-    ### ❌ **Invalid SMILES String**
-    Please check your input and try again. Ensure:
-    - Proper atom symbols
-    - Correct bond notation
-    - Valid parentheses pairing
+    ### **Invalid SMILES String**
+    Please check your input and try again.
     """)
     st.stop()
 
 # -------------------- MOLECULE VISUALIZATION --------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="section-header">📊 Molecule Visualization</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-header">Molecule Visualization</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
     mol_img = draw_molecule(smiles)
     if mol_img:
-        # Add a decorative border to the molecule image
-        st.markdown("""
-        <div style="border: 3px solid #667eea; border-radius: 15px; padding: 10px; display: inline-block;">
-        """, unsafe_allow_html=True)
-        st.image(mol_img, caption="**Molecular Structure**", use_column_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.image(mol_img, caption="Molecular Structure", use_column_width=True)
     else:
         st.error("Could not generate molecule image")
 
 with col2:
-    # Calculate descriptors with progress bar
-    st.markdown("### 🧮 **Descriptor Calculation**")
+    st.markdown("### **Descriptor Calculation**")
     
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for i in range(100):
-        progress_bar.progress(i + 1)
-        status_text.text(f"Calculating descriptors... {i+1}%")
-    
-    desc_df = calculate_selected_descriptors(smiles, model_features)
+    # Simple progress indicator
+    with st.spinner("Calculating descriptors..."):
+        desc_df = calculate_selected_descriptors(smiles, model_features)
     
     if desc_df is None:
-        st.error("❌ Descriptor calculation failed")
+        st.error("Descriptor calculation failed")
         st.stop()
     
-    progress_bar.empty()
-    status_text.empty()
-    
     # Clean data
-    nan_count = desc_df.isna().sum().sum()
-    if nan_count > 0:
-        desc_df = clean_dataframe_for_prediction(desc_df)
+    desc_df = clean_dataframe_for_prediction(desc_df)
     
-    # Display descriptor statistics
-    col_stat1, col_stat2, col_stat3 = st.columns(3)
+    # Display compact descriptor metrics
+    col_stat1, col_stat2 = st.columns(2)
     
     with col_stat1:
-        zero_count = (desc_df.iloc[0] == 0.0).sum()
-        st.metric("Zero Values", f"{zero_count}", delta=f"{zero_count/len(model_features)*100:.1f}%")
+        non_zero = (desc_df.iloc[0] != 0.0).sum()
+        st.metric("Valid Descriptors", f"{non_zero}")
     
     with col_stat2:
-        non_zero = len(model_features) - zero_count
-        st.metric("Valid Descriptors", f"{non_zero}", delta="✓" if non_zero > 0 else "⚠️")
+        zero_count = (desc_df.iloc[0] == 0.0).sum()
+        st.metric("Zero Values", f"{zero_count}")
     
-    with col_stat3:
-        max_val = desc_df.max().max()
-        min_val = desc_df.min().min()
-        st.metric("Value Range", f"{min_val:.2f} - {max_val:.2f}")
-    
-    # Descriptor preview in tabs
-    tab1, tab2 = st.tabs(["📋 Descriptor Values", "📈 Statistics"])
-    
-    with tab1:
-        desc_display = desc_df.T.rename(columns={0: 'Value'})
-        desc_display['Status'] = ['✅' if x != 0.0 else '⚠️' for x in desc_display['Value']]
-        st.dataframe(desc_display.head(20), use_container_width=True, height=300)
-        if len(desc_display) > 20:
-            st.caption(f"Showing 20 of {len(desc_display)} descriptors. Use scrollbar to view more.")
-    
-    with tab2:
-        st.dataframe(desc_df.describe(), use_container_width=True)
+    # Descriptor preview
+    if st.checkbox("Show descriptor values", value=False):
+        st.dataframe(desc_df.T.rename(columns={0: 'Value'}), use_container_width=True, height=200)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- PREDICTION SECTION --------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="section-header">🎯 Make Prediction</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-header">Make Prediction</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns([2, 1])
 
@@ -507,27 +449,17 @@ with col1:
     st.markdown("""
     ### Ready to Predict?
     Click the button below to analyze your molecule's SGLT2 inhibition potential.
-    The model will provide:
-    - **Activity prediction** (Active/Inactive)
-    - **Confidence score**
-    - **Detailed explanations**
     """)
 
 with col2:
-    predict_button = st.button("🚀 **RUN PREDICTION**", type="primary", use_container_width=True, help="Click to predict SGLT2 inhibition activity")
+    predict_button = st.button("**RUN PREDICTION**", type="primary", use_container_width=True)
 
 if predict_button:
-    with st.spinner("🤖 **Analyzing molecule...**"):
-        # Add prediction animation
-        progress_placeholder = st.empty()
-        for i in range(101):
-            progress_placeholder.progress(i)
-        
-        # Make prediction
+    with st.spinner("Analyzing molecule..."):
         desc_df_clean = clean_dataframe_for_prediction(desc_df)
         
         if desc_df_clean.isna().any().any():
-            st.error("❌ Data cleaning failed. Cannot make prediction.")
+            st.error("Data cleaning failed. Cannot make prediction.")
             st.stop()
         
         pred = model.predict(desc_df_clean)[0]
@@ -535,20 +467,17 @@ if predict_button:
         if hasattr(model, 'predict_proba'):
             probs = model.predict_proba(desc_df_clean)[0]
             prob = float(probs[1]) if len(probs) == 2 else None
-        
-        progress_placeholder.empty()
     
     # -------------------- RESULTS DISPLAY --------------------
-    st.markdown("## 📊 **Prediction Results**")
+    st.markdown("## **Prediction Results**")
     
     # Result cards
-    col1, col2, col3 = st.columns([1, 1, 1])
+    col1, col2 = st.columns([1, 1])
     
     with col1:
         if pred == 1:
             st.markdown("""
             <div class="metric-card" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);">
-                <h1 style="font-size: 3rem; margin: 0;">✅</h1>
                 <h2 style="margin: 10px 0;">ACTIVE</h2>
                 <p>SGLT2 Inhibitor</p>
             </div>
@@ -556,7 +485,6 @@ if predict_button:
         else:
             st.markdown("""
             <div class="metric-card" style="background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);">
-                <h1 style="font-size: 3rem; margin: 0;">❌</h1>
                 <h2 style="margin: 10px 0;">INACTIVE</h2>
                 <p>Not an SGLT2 Inhibitor</p>
             </div>
@@ -565,27 +493,12 @@ if predict_button:
     with col2:
         if prob is not None:
             st.plotly_chart(create_gauge_chart(prob, "Confidence Score"), use_container_width=True)
-        else:
-            st.info("### 📈 Probability Score\nNot available for this model")
-    
-    with col3:
-        # Additional metrics
-        st.markdown("""
-        <div class="metric-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-            <h1 style="font-size: 3rem; margin: 0;">🔍</h1>
-            <h3>Model Insights</h3>
-            <p>Based on {0} descriptors</p>
-            <span class="badge badge-info">GBM Model</span>
-            <span class="badge badge-info">SHAP Ready</span>
-        </div>
-        """.format(len(model_features)), unsafe_allow_html=True)
     
     # -------------------- SHAP ANALYSIS --------------------
     if shap:
-        st.markdown("---")
-        st.markdown('<div class="section-header">📈 Model Interpretation</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Model Interpretation</div>', unsafe_allow_html=True)
         
-        with st.spinner("🔍 **Generating feature explanations...**"):
+        with st.spinner("Generating feature explanations..."):
             try:
                 explainer = shap.TreeExplainer(model)
                 shap_values = explainer.shap_values(desc_df_clean)
@@ -600,39 +513,20 @@ if predict_button:
                     shap_val = shap_values.flatten()
                     base_value = expected_value
                 
-                # Feature importance plot
+                # Create waterfall plot
                 st.plotly_chart(
-                    create_feature_importance_plot(shap_val, desc_df_clean.columns, top_n=15),
+                    create_shap_waterfall_plot(shap_val, base_value, desc_df_clean.columns, max_display=12),
                     use_container_width=True
                 )
                 
-                # Detailed SHAP values in expander
-                with st.expander("📋 **View Detailed Feature Contributions**"):
-                    shap_df = pd.DataFrame({
-                        'Feature': desc_df_clean.columns,
-                        'SHAP Value': shap_val,
-                        'Descriptor Value': desc_df_clean.iloc[0].values,
-                        'Impact': ['Positive' if v > 0 else 'Negative' for v in shap_val]
-                    }).sort_values('SHAP Value', key=abs, ascending=False)
-                    
-                    st.dataframe(shap_df.head(20), use_container_width=True)
-                    
             except Exception as e:
                 st.error(f"SHAP analysis failed: {e}")
-                st.info("""
-                ⚠️ **Alternative Analysis Available**
-                While SHAP explanations failed, you can still:
-                1. Review the calculated descriptors
-                2. Check the confidence score
-                3. Validate the SMILES structure
-                """)
     
     # -------------------- DOWNLOAD RESULTS --------------------
     st.markdown("---")
     col1, col2 = st.columns(2)
     
     with col1:
-        # Create results dictionary
         results = {
             "smiles": smiles,
             "prediction": "Active" if pred == 1 else "Inactive",
@@ -640,11 +534,10 @@ if predict_button:
             "descriptors": desc_df_clean.iloc[0].to_dict()
         }
         
-        # Convert to JSON for download
         import io
         json_str = json.dumps(results, indent=2)
         st.download_button(
-            label="📥 **Download Results (JSON)**",
+            label="**Download Results (JSON)**",
             data=json_str,
             file_name=f"sglt2_prediction_{smiles[:10]}.json",
             mime="application/json",
@@ -652,21 +545,16 @@ if predict_button:
         )
     
     with col2:
-        if st.button("🔄 **Analyze Another Molecule**", use_container_width=True):
+        if st.button("**Analyze Another Molecule**", use_container_width=True):
             st.rerun()
 
 st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- FOOTER --------------------
 st.markdown("""
-<div style="text-align: center; color: #718096; padding: 30px; margin-top: 40px;">
-    <div style="background: linear-gradient(90deg, #667eea, #764ba2); height: 2px; width: 100px; margin: 0 auto 20px;"></div>
-    <h3 style="color: #4a5568;">🔬 SGLT2 Inhibitor Prediction Tool</h3>
-    <p>Built with ❤️ using Streamlit • RDKit • Mordred • SHAP</p>
-    <div style="display: flex; justify-content: center; gap: 20px; margin-top: 15px;">
-        <span class="badge badge-info">v1.0.0</span>
-        <span class="badge badge-info">ML-Powered</span>
-        <span class="badge badge-info">Interactive</span>
-    </div>
+<div style="text-align: center; color: #718096; padding: 20px; margin-top: 30px;">
+    <div style="background: linear-gradient(90deg, #667eea, #764ba2); height: 2px; width: 80px; margin: 0 auto 10px;"></div>
+    <p>SGLT2 Inhibitor Prediction Tool</p>
+    <p>Built with Streamlit • RDKit • Mordred • SHAP</p>
 </div>
 """, unsafe_allow_html=True)
