@@ -58,22 +58,27 @@ def draw_molecule(smiles):
 def calculate_descriptors(smiles):
     mol = Chem.MolFromSmiles(smiles)
     mordred_vals = calc(mol)
+
     data = {}
     for f in model_features:
         try:
             data[f] = float(mordred_vals[f])
         except:
             data[f] = 0.0
+
+    # Explicit Lipinski descriptor
     data["nHBAcc_Lipinski"] = Lipinski.NumHAcceptors(mol)
-    return pd.DataFrame([data]).fillna(0)
+
+    return pd.DataFrame([data]).replace([np.inf, -np.inf], 0).fillna(0)
 
 # ================= HEADER =================
 st.title("SGLT2i Predictor v1.0: Predict SGLT2 inhibitor(s)")
 
 with st.expander("What is SGLT2i Predictor?", expanded=True):
     st.write(
-        "**SGLT2i Predictor** allows users to predict the SGLT2 inhibitory activity of small molecules/drug molecules "
-        "using a machine learning model and provides SHAP-based interpretability."
+        "**SGLT2i Predictor** allows users to predict the SGLT2 inhibitory activity of "
+        "small molecules/drug molecules using a machine learning model and provides "
+        "SHAP-based interpretability."
     )
 
 # ================= INPUT SECTION =================
@@ -104,15 +109,16 @@ st.markdown("---")
 st.subheader("📊 Results")
 
 desc_df = calculate_descriptors(smiles)
-desc_df = desc_df.replace([np.inf, -np.inf], 0)
 
 pred = model.predict(desc_df)[0]
-prob = model.predict_proba(desc_df)[0][1]
+prob = model.predict_proba(desc_df)[0, 1]
 
 col1, col2 = st.columns(2)
 
+# ================= PREDICTION OUTPUT =================
 with col1:
     st.image(draw_molecule(smiles), caption="Query Molecule", width=250)
+
     if pred == 1:
         st.success("🟢 **ACTIVE – SGLT2 Inhibitor**")
     else:
@@ -120,30 +126,39 @@ with col1:
 
     st.metric("Confidence Score", f"{prob:.2%}")
 
+# ================= SHAP INTERPRETATION =================
 with col2:
     st.subheader("📈 SHAP Interpretation")
+
+    # ---- TREE SHAP (NEW API, SINGLE SOURCE OF TRUTH) ----
     explainer = shap.TreeExplainer(model)
-    shap_vals = explainer.shap_values(desc_df)
+    shap_values = explainer(desc_df)
 
-    shap_val = shap_vals[1][0] if isinstance(shap_vals, list) else shap_vals[0]
-    base_val = explainer.expected_value[1] if isinstance(explainer.expected_value, list) else explainer.expected_value
+    # Binary classifier → class 1 (Inhibitor)
+    shap_exp = shap_values[0]
 
-    fig, ax = plt.subplots(figsize=(5, 4))
+    fig, ax = plt.subplots(figsize=(6, 4))
+
     shap.plots.waterfall(
         shap.Explanation(
-            values=shap_val[:10],
-            base_values=base_val,
-            data=desc_df.iloc[0].values[:10],
-            feature_names=desc_df.columns[:10]
+            values=shap_exp.values,
+            base_values=shap_exp.base_values,
+            data=desc_df.iloc[0].values,
+            feature_names=desc_df.columns
         ),
+        max_display=10,
         show=False
     )
-    st.pyplot(fig)
+
+    st.pyplot(fig, use_container_width=True)
     plt.close()
 
 # ================= DESCRIPTORS =================
 with st.expander("🔬 Calculated Descriptors"):
-    st.dataframe(desc_df.T.rename(columns={0: "Value"}), use_container_width=True)
+    st.dataframe(
+        desc_df.T.rename(columns={0: "Value"}),
+        use_container_width=True
+    )
 
 # ================= FOOTER =================
 st.markdown("---")
