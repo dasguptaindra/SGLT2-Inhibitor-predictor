@@ -10,6 +10,8 @@ mordred>=1.2.0
 padelpy>=0.1.7
 streamlit-ketcher>=0.0.1
 Pillow>=9.0.0
+plotly
+
 
 
 
