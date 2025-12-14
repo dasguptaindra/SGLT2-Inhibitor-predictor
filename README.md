@@ -18,8 +18,8 @@
 
 
 👇 **Click the link to start predicting!**
-🔗 Streamlit Web App ❤️: https://sglt2-inhibitor-predictor-mc7uk6jwg5g4bsd8xx4zqz.streamlit.app/ 
-________________________________________
+🔗 [![Streamlit App](https://img.shields.io/badge/Streamlit-Web%20App-red?logo=streamlit&logoColor=white)](https://sglt2-inhibitor-predictor-mc7uk6jwg5g4bsd8xx4zqz.streamlit.app/)
+
 🔬 **Background**
 
 **SGLT2 inhibitors are crucial therapeutic agents for Type-2 Diabetes management and potential candidates for renal and cardiovascular protection**. 
