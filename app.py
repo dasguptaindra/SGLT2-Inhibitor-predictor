@@ -1,5 +1,5 @@
 # =========================
-# SGLT2i Predictor (Prototype UI)
+# SGLT2i Predictor
 # =========================
 
 import os, json, joblib
@@ -24,8 +24,8 @@ except:
 
 # ================= PAGE CONFIG =================
 st.set_page_config(
-    page_title="SGLT2 Inhibitor Predictor",
-    page_icon="🧪",
+    page_title="SGLT2i Predictor",
+    page_icon="💊",
     layout="wide"
 )
 
@@ -68,12 +68,12 @@ def calculate_descriptors(smiles):
     return pd.DataFrame([data]).fillna(0)
 
 # ================= HEADER =================
-st.title("🧪 SGLT2i Predictor v1.0")
+st.title("💊 SGLT2i Predictor v1.0")
 
 with st.expander("What is SGLT2i Predictor?", expanded=True):
     st.write(
         "**SGLT2i Predictor** predicts whether a molecule acts as an "
-        "**SGLT2 inhibitor or non-inhibitor** using a Gradient Boosting model, "
+        "**SGLT2 inhibitor or non-inhibitor** using Machine learning model, "
         "and provides SHAP-based interpretability."
     )
 
