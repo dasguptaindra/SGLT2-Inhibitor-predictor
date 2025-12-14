@@ -1,5 +1,4 @@
 # app.py
-
 import os
 import json
 import joblib
@@ -8,8 +7,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-
-# -------------------- RDKit & Mordred Imports --------------------
 try:
     from rdkit import Chem
     from rdkit.Chem import Draw, Lipinski
@@ -39,7 +36,7 @@ except Exception:
 
 # -------------------- PAGE CONFIG --------------------
 st.set_page_config(
-    page_title="SGLT2 Inhibitor Predictor (GBM)",
+    page_title="SGLT2i Predictor",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -198,8 +195,8 @@ def create_manual_waterfall(shap_val, base_value, desc_df):
 # -------------------- HEADER --------------------
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    st.markdown('<div class="drug-container"><div style="font-size:4rem;">🧪💊</div></div>', unsafe_allow_html=True)
-    st.markdown('<div class="main-header">SGLT2 Inhibitor Predictor</div>', unsafe_allow_html=True)
+    st.markdown('<div class="drug-container"><div style="font-size:4rem;">💊</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">SGLT2i Predictor</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -280,7 +277,7 @@ st.subheader("🎯 Make Prediction")
 col1, col2, col3 = st.columns([1, 2, 1])
 
 with col2:
-    predict_clicked = st.button("🚀 PREDICT SGLT2 ACTIVITY", use_container_width=True)
+    predict_clicked = st.button("🚀 PREDICT SGLT2i ACTIVITY", use_container_width=True)
 
 if predict_clicked:
     with st.spinner("🤖 Making prediction..."):
@@ -364,6 +361,6 @@ if predict_clicked:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666;'>
-    🧪 <strong>SGLT2 Inhibitor Prediction Tool</strong> | Built with Streamlit
+    🧪 <strong>SGLT2i Prediction Tool</strong> | Built with Streamlit
 </div>
 """, unsafe_allow_html=True)
