@@ -68,7 +68,7 @@ def calculate_descriptors(smiles):
     return pd.DataFrame([data]).fillna(0)
 
 # ================= HEADER =================
-st.title("💊 SGLT2i Predictor v1.0")
+st.title("SGLT2i Predictor v1.0")
 
 with st.expander("What is SGLT2i Predictor?", expanded=True):
     st.write(
