@@ -321,9 +321,6 @@ if smiles_input:
                 with col_conf2:
                     st.metric("Prediction", "🟢 ACTIVE" if y_external_pred == 1 else "🔴 INACTIVE")
 
-            # Separator
-            st.markdown("---")
-
 # Contact section
 with st.expander("Contact & Information", expanded=False):
     st.write('''
