@@ -43,7 +43,7 @@ h1, h2, h3 { margin-bottom: 0.3rem; }
 
 
 # ================= LOAD MODEL & FEATURES =================
-MODEL_PATH = "gradient_boosting_model_fixed.joblib"
+MODEL_PATH = "gradient_boosting_model.joblib"
 FEATURES_PATH = "model_features.json"
 
 model = joblib.load(MODEL_PATH)
