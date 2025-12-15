@@ -28,7 +28,7 @@ warnings.filterwarnings('ignore')
 # [Details](https://www.scopus.com/authid/detail.uri?authorId=57190176332).
 
 # ================= MODEL LOADING =================
-MODEL_PATH = "gradient_boosting_model_fixed.joblib"
+MODEL_PATH = "gradient_boosting_model.joblib"
 FEATURES_PATH = "model_features.json"
 
 model = joblib.load(MODEL_PATH)
