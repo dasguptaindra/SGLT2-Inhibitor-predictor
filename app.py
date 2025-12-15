@@ -147,6 +147,22 @@ def predict_smiles(smiles: str):
     
     # Print feature summary
     print_feature_summary(X, desc_df, model_features)
+
+# =====================================================
+# PREDICTION PIPELINE
+# =====================================================
+def predict_smiles(smiles: str):
+    """Run the complete prediction pipeline."""
+    print(f"\n🧪 Calculating descriptors for molecule...")
+    
+    # Calculate descriptors
+    desc_df = calculate_descriptors_from_smiles(smiles)
+    
+    # Extract features
+    X = extract_features(desc_df, model_features)
+    
+    # Print feature summary
+    print_feature_summary(X, desc_df, model_features)
     
 # =====================================================
 # PREDICTION PIPELINE
