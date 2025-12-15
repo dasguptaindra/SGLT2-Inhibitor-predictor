@@ -44,7 +44,7 @@ st.set_page_config(
 st.title("SGLT2i Predictor v1.0: Predict SGLT2 inhibitor(s)")
 
 with st.expander("What is SGLT2i Predictor?", expanded=True):
-    st.write('''*SGLT2i Predictor* is a tool that allows users to predict 
+    st.write('''**SGLT2i Predictor** is a tool that allows users to predict 
              the SGLT2 inhibitory activity of small molecule (**Active** or **Inactive**) 
              and also provides SHAP-based interpretability.''')
 
