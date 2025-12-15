@@ -1,5 +1,5 @@
 # =====================================================
-# External Molecule Predictor
+# External Molecule Predictor (PRODUCTION READY)
 # =====================================================
 
 import json
@@ -7,6 +7,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import traceback
 
 # ---------- RDKit & Mordred ----------
 from rdkit import Chem
@@ -25,43 +26,45 @@ FEATURE_PATH = "model_features.json"
 # =====================================================
 # LOAD MODEL & FEATURES
 # =====================================================
-model = joblib.load(MODEL_PATH)
-
-with open(FEATURE_PATH, "r") as f:
-    model_features = json.load(f)
-
-print(f"\n✅ Loaded model with {len(model_features)} features")
+try:
+    model = joblib.load(MODEL_PATH)
+    with open(FEATURE_PATH, "r") as f:
+        model_features = json.load(f)
+    print(f"\n✅ Loaded model with {len(model_features)} features")
+except FileNotFoundError as e:
+    print(f"\n❌ Error loading files: {e}")
+    print("Ensure 'gradient_boosting_model.joblib' and 'model_features.json' are in the directory.")
+    exit()
 
 # =====================================================
-# DESCRIPTOR NAME MAPPING & PATTERN MATCHING
+# DESCRIPTOR MATCHING LOGIC (CORE FIX)
 # =====================================================
 def find_matching_descriptor(mordred_keys, target_name):
     """
     Find the best matching descriptor name from Mordred keys.
-    Handles case variations and naming differences.
+    Handles case variations, underscores, and partial matches.
     """
     target_lower = target_name.lower().replace('-', '').replace('_', '').replace(' ', '')
     
-    # First, try exact match (case-insensitive)
+    # 1. Exact match (case-insensitive)
     for mordred_key in mordred_keys:
         if str(mordred_key).lower() == target_name.lower():
             return str(mordred_key)
     
-    # Try matching without special characters
+    # 2. Match without special characters
     for mordred_key in mordred_keys:
         mordred_clean = str(mordred_key).lower().replace('-', '').replace('_', '').replace(' ', '')
         if mordred_clean == target_lower:
             return str(mordred_key)
     
-    # Try substring match
+    # 3. Substring match
     for mordred_key in mordred_keys:
         if target_name.lower() in str(mordred_key).lower():
             return str(mordred_key)
     
-    # Try partial match for patterns like MINaaN -> MinAaN
+    # 4. Partial pattern match (e.g., for MINaaN -> MinAaN)
     for mordred_key in mordred_keys:
         mordred_lower = str(mordred_key).lower()
-        # Check if target appears in descriptor name (allowing for variations)
         if any(part in mordred_lower for part in target_lower.split('_')):
             return str(mordred_key)
     
@@ -76,10 +79,10 @@ def calculate_descriptors_from_smiles(smiles: str) -> pd.DataFrame:
     if mol is None:
         raise ValueError("Invalid SMILES string")
 
-    # Add hydrogens for better descriptor calculation
+    # Add hydrogens for accurate 2D/3D descriptor calculation
     mol = Chem.AddHs(mol)
     
-    # Calculate all Mordred descriptors
+    # Calculate all Mordred descriptors (ignore_3D=True for speed/robustness)
     calc = Calculator(descriptors, ignore_3D=True)
     desc_series = calc(mol)
     
@@ -98,21 +101,23 @@ def calculate_descriptors_from_smiles(smiles: str) -> pd.DataFrame:
     return pd.DataFrame([desc_dict])
 
 # =====================================================
-# FEATURE EXTRACTION WITH IMPROVED MATCHING
+# FEATURE EXTRACTION (ROBUST)
 # =====================================================
 def extract_features(desc_df, required_features):
-    """Extract required features from Mordred descriptors using pattern matching."""
+    """
+    Extract required features from Mordred descriptors using fuzzy pattern matching.
+    Returns: DataFrame (X), Dictionary (mapping)
+    """
     X = pd.DataFrame(0.0, index=[0], columns=required_features)
     available_columns = [str(c) for c in desc_df.columns]
     
     print(f"\n📊 Available Mordred descriptors: {len(available_columns)}")
     print(f"🔍 Looking for {len(required_features)} required features...")
     
-    # Create a mapping of feature names to Mordred descriptor names
     feature_mapping = {}
     
     for feat in required_features:
-        # Try to find the matching descriptor in Mordred output
+        # Step 1: Try dynamic matching
         matched_name = find_matching_descriptor(available_columns, feat)
         
         if matched_name:
@@ -121,12 +126,10 @@ def extract_features(desc_df, required_features):
             
             if pd.notna(val) and val not in [np.inf, -np.inf]:
                 X.at[0, feat] = float(val)
-                # print(f"✅ Found: '{feat}' -> '{matched_name}' = {val}")
             else:
-                X.at[0, feat] = 0.0  # Default for NaN/inf values
-                # print(f"⚠️  Found but invalid: '{feat}' -> '{matched_name}' (NaN/Inf)")
+                X.at[0, feat] = 0.0  # Default for NaN/inf
         else:
-            # Check common variations
+            # Step 2: Check hardcoded variations for known tricky descriptors
             common_variations = {
                 'MINaaN': ['MinAaN', 'minaann', 'MinAaN'],
                 'MAXaaN': ['MaxAaN', 'maxaann', 'MaxAaN'],
@@ -150,9 +153,11 @@ def extract_features(desc_df, required_features):
                 else:
                     X.at[0, feat] = 0.0
             else:
-                # Try to find any descriptor containing the feature name
+                # Step 3: Desperate partial match
                 for col in available_columns:
-                    if feat.lower().replace('-', '').replace('_', '') in col.lower().replace('-', '').replace('_', ''):
+                    clean_feat = feat.lower().replace('-', '').replace('_', '')
+                    clean_col = col.lower().replace('-', '').replace('_', '')
+                    if clean_feat in clean_col:
                         feature_mapping[feat] = col
                         val = desc_df.at[0, col]
                         if pd.notna(val) and val not in [np.inf, -np.inf]:
@@ -160,13 +165,13 @@ def extract_features(desc_df, required_features):
                             print(f"🔍 Partial match: '{feat}' -> '{col}'")
                         break
                 else:
-                    # Feature not found at all
+                    # Feature not found
                     X.at[0, feat] = 0.0
                     print(f"❌ Not found: '{feat}'")
     
     # Print summary of found features
     found_count = (X != 0).sum().sum()
-    print(f"\n📈 Successfully mapped {found_count}/{len(required_features)} features")
+    print(f"\n📈 Successfully mapped {found_count}/{len(required_features)} features (Non-zero)")
     
     return X, feature_mapping
 
@@ -192,13 +197,10 @@ def print_feature_summary(X, desc_df, model_features, feature_mapping):
             original_val = desc_df.at[0, mordred_name]
             if pd.notna(original_val) and original_val not in [np.inf, -np.inf]:
                 status = "✅ Valid"
-                color_code = ""
             else:
                 status = "⚠️  NaN/Inf"
-                color_code = ""
         else:
             status = "❌ Not in Mordred"
-            color_code = ""
         
         print(f"{feat:<25} {mordred_name:<25} {value:<15.6f} {status}")
     
@@ -211,12 +213,6 @@ def print_feature_summary(X, desc_df, model_features, feature_mapping):
     print(f"📊 Total features required: {len(model_features)}")
     print(f"✅ Features with non-zero values: {non_zero_count}")
     print(f"⚠️  Features with zero/default values: {zero_count}")
-    
-    if zero_count > 0:
-        print("\nFeatures with zero values:")
-        for feat in model_features:
-            if X.at[0, feat] == 0:
-                print(f"  • {feat}")
 
 # =====================================================
 # PREDICTION PIPELINE
@@ -229,7 +225,7 @@ def predict_smiles(smiles: str):
     # Calculate descriptors
     desc_df = calculate_descriptors_from_smiles(smiles)
     
-    # Extract features with improved matching
+    # Extract features with improved matching (returns X AND mapping)
     X, feature_mapping = extract_features(desc_df, model_features)
     
     # Print feature summary
@@ -249,80 +245,80 @@ def predict_smiles(smiles: str):
 # =====================================================
 # SHAP EXPLANATION
 # =====================================================
-def explain_prediction(X, model, feature_mapping):
+def explain_prediction(X, model, feature_mapping, pred_class):
     """Generate SHAP explanation for the prediction."""
     try:
         print("\n🔍 Generating SHAP explanation...")
         
-        # Create a simplified explainer
+        # Determine explainer type based on model
         if hasattr(model, 'predict_proba'):
-            # For classifiers
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(X)
             
-            # Get the appropriate SHAP values for the predicted class
-            if isinstance(shap_values, list) and len(shap_values) > 1:
-                # Binary classification
+            # Handle binary classification list output
+            if isinstance(shap_values, list):
                 shap_array = shap_values[1] if pred_class == 1 else shap_values[0]
+                # For waterfall, we usually want the Explainer object, not just values
+                # Re-instantiate generic explainer for better plot support
+                explainer_gen = shap.Explainer(model, X)
+                shap_obj = explainer_gen(X)
             else:
-                shap_array = shap_values
+                shap_obj = shap.Explanation(shap_values, base_values=explainer.expected_value, data=X)
         else:
-            # For regressors
             explainer = shap.TreeExplainer(model)
-            shap_values = explainer(X)
-            shap_array = shap_values.values
+            shap_obj = explainer(X)
         
-        # Create a figure with two subplots
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        # --- Visualization ---
+        plt.figure(figsize=(16, 6))
         
-        # Waterfall plot
-        plt.figure(figsize=(10, 8))
-        shap.plots.waterfall(shap_values[0], max_display=15, show=False)
-        ax1 = plt.gca()
-        ax1.set_title("SHAP Waterfall Plot", fontsize=14, fontweight='bold')
-        
-        # Bar plot for feature importance
-        plt.figure(figsize=(10, 8))
-        shap.plots.bar(shap_values, max_display=15, show=False)
-        ax2 = plt.gca()
-        ax2.set_title("Feature Importance", fontsize=14, fontweight='bold')
-        
+        # 1. Waterfall Plot (Local explanation)
+        try:
+            plt.subplot(1, 2, 1)
+            # If shap_obj is list (older shap versions), use the specific class index
+            if isinstance(shap_obj, list): 
+                shap_to_plot = shap_obj[0] 
+            elif len(shap_obj.shape) == 3: # (samples, features, classes)
+                shap_to_plot = shap_obj[0, :, pred_class]
+            else:
+                shap_to_plot = shap_obj[0]
+                
+            shap.plots.waterfall(shap_to_plot, max_display=15, show=False)
+            plt.title("SHAP Waterfall (Local Explanation)", fontsize=12, fontweight='bold')
+        except Exception as e:
+            print(f"⚠️ Waterfall plot skipped: {e}")
+
+        # 2. Bar Plot (Global/Local importance)
+        try:
+            plt.subplot(1, 2, 2)
+            shap.plots.bar(shap_to_plot, max_display=15, show=False)
+            plt.title("Feature Importance", fontsize=12, fontweight='bold')
+        except Exception as e:
+             print(f"⚠️ Bar plot skipped: {e}")
+
         plt.tight_layout()
         plt.show()
         return True
         
     except Exception as e:
-        print(f"⚠️  Could not generate SHAP explanation: {e}")
-        print("Trying alternative explanation method...")
+        print(f"⚠️ Could not generate complete SHAP explanation: {e}")
+        # Fallback: Simple Feature Importance from inputs
+        print("Showing raw feature values instead.")
         
-        # Try simpler explanation
-        try:
-            explainer = shap.Explainer(model, X)
-            shap_values = explainer(X)
-            shap.summary_plot(shap_values, X, show=False)
-            plt.title("SHAP Feature Importance")
-            plt.tight_layout()
-            plt.show()
-            return True
-        except:
-            print("SHAP explanation failed. Showing feature importance instead.")
-            
-            # Show feature values as fallback
-            feature_importance = pd.DataFrame({
-                'Feature': X.columns,
-                'Value': X.iloc[0].values
-            })
-            feature_importance['Absolute'] = np.abs(feature_importance['Value'])
-            feature_importance = feature_importance.sort_values('Absolute', ascending=False).head(10)
-            
-            plt.figure(figsize=(10, 6))
-            bars = plt.barh(feature_importance['Feature'], feature_importance['Value'])
-            plt.xlabel('Feature Value')
-            plt.title('Top 10 Feature Values (Fallback)')
-            plt.tight_layout()
-            plt.show()
-            
-            return True
+        feature_importance = pd.DataFrame({
+            'Feature': X.columns,
+            'Value': X.iloc[0].values
+        })
+        # Sort by absolute value to show most impactful features (proxy)
+        feature_importance['Absolute'] = np.abs(feature_importance['Value'])
+        feature_importance = feature_importance.sort_values('Absolute', ascending=False).head(15)
+        
+        plt.figure(figsize=(10, 6))
+        plt.barh(feature_importance['Feature'], feature_importance['Value'])
+        plt.xlabel('Feature Value')
+        plt.title('Top 15 Feature Values (Fallback)')
+        plt.tight_layout()
+        plt.show()
+        return True
 
 # =====================================================
 # MAIN EXECUTION
@@ -332,19 +328,19 @@ if __name__ == "__main__":
     print("🤖 MOLECULE PREDICTION SYSTEM")
     print("="*60)
     
-    # Example SMILES or get from user
+    # Example molecules
     example_smiles = [
-        "CC(=O)OC1=CC=CC=C1C(=O)O",  # Aspirin
+        "CC(=O)OC1=CC=CC=C1C(=O)O",      # Aspirin
         "CN1C=NC2=C1C(=O)N(C(=O)N2C)C",  # Caffeine
-        "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O",  # Ibuprofen
+        "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O", # Ibuprofen
     ]
     
     print("\n💊 Example molecules:")
     for i, sm in enumerate(example_smiles, 1):
         print(f"  {i}. {sm}")
     
-    # Get SMILES input
-    smiles_input = input("\n🔬 Enter SMILES string (or press Enter for aspirin): ").strip()
+    # Get Input
+    smiles_input = input("\n🔬 Enter SMILES string (or press Enter for Aspirin): ").strip()
     
     if not smiles_input:
         smiles_input = example_smiles[0]
@@ -385,16 +381,15 @@ if __name__ == "__main__":
         print("🔍 MODEL EXPLANATION")
         print("="*60)
         
-        explain_prediction(X_input, model, mapping)
+        explain_prediction(X_input, model, mapping, prediction)
         
         print("\n" + "="*60)
         print("✅ PREDICTION COMPLETED SUCCESSFULLY!")
         print("="*60)
         
     except ValueError as e:
-        print(f"\n❌ Error: {e}")
-        print("Please check your SMILES string and try again.")
+        print(f"\n❌ Input Error: {e}")
+        print("Please check your SMILES string syntax.")
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
-        import traceback
+        print(f"\n❌ System Error: {e}")
         traceback.print_exc()
