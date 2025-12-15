@@ -24,9 +24,6 @@ from rdkit.Chem import Lipinski
 import warnings
 warnings.filterwarnings('ignore')
 
-# Author : Dr. Sk. Abdul Amin
-# [Details](https://www.scopus.com/authid/detail.uri?authorId=57190176332).
-
 # ================= MODEL LOADING =================
 MODEL_PATH = "gradient_boosting_model.joblib"
 FEATURES_PATH = "model_features.json"
@@ -266,9 +263,7 @@ def create_shap_plot(model, X_external, prediction):
 if smiles_input:
     mol = Chem.MolFromSmiles(smiles_input)
     if mol:
-        # Author : Dr. Sk. Abdul Amin
-        # [Details](https://www.scopus.com/authid/detail.uri?authorId=57190176332).
-
+        
         st.subheader("Results")
 
         try:
@@ -482,16 +477,12 @@ if smiles_input:
 else:
     st.info("👈 Please enter a SMILES string or draw a molecule to get predictions.")
 
-# Author : Dr. Sk. Abdul Amin
-# [Details](https://www.scopus.com/authid/detail.uri?authorId=57190176332).
 # Contact section
 with st.expander("Contact & Information", expanded=False):
     st.write('''
-        #### 📧 Contact Us
-        - **Dr. Sk. Abdul Amin**: [pharmacist.amin@gmail.com](mailto:pharmacist.amin@gmail.com)
-        
+        #### 📧 Contact Us      
         #### 🐛 Report Issues
-        Report bugs or contribute: [GitHub Repository](https://github.com/Amincheminform)
+        Report bugs or contribute: [GitHub Repository](https://github.com/dasguptaindra/SGLT2i-predictor)
         
         #### 🔬 Model Details
         - **Algorithm**: Gradient Boosting Classifier
