@@ -13,6 +13,7 @@ from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import Draw, Lipinski
 from mordred import Calculator, descriptors
+from mordred.AtomTypeEState import AtomTypeEState
 import shap
 
 # -------- Optional Ketcher --------
@@ -34,43 +35,67 @@ st.markdown("""
 <style>
 .block-container { padding-top: 1rem; padding-bottom: 1rem; }
 h1, h2, h3 { margin-bottom: 0.3rem; }
-.stMetric { padding: 0.5rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
 # ================= MODEL LOADING =================
-@st.cache_resource
-def load_model():
-    MODEL_PATH = "gradient_boosting_model_fixed.joblib"
-    FEATURES_PATH = "model_features.json"
-    
-    model = joblib.load(MODEL_PATH)
-    with open(FEATURES_PATH) as f:
-        model_features = json.load(f)
-    
-    # Initialize Mordred calculator
-    calc = Calculator(descriptors, ignore_3D=True)
-    
-    return model, model_features, calc
+MODEL_PATH = "gradient_boosting_model_fixed.joblib"
+FEATURES_PATH = "model_features.json"
 
-try:
-    model, model_features, calc = load_model()
-except Exception as e:
-    st.error(f"Error loading model: {str(e)}")
-    st.stop()
+model = joblib.load(MODEL_PATH)
+with open(FEATURES_PATH) as f:
+    model_features = json.load(f)
+
+# Initialize Mordred calculator with ALL descriptors
+calc = Calculator(descriptors, ignore_3D=True)
 
 # ================= HELPER FUNCTIONS =================
 def validate_smiles(smiles):
-    """Validate SMILES string"""
-    if not smiles or smiles.strip() == "":
-        return False
     return Chem.MolFromSmiles(smiles) is not None
 
 def draw_molecule(smiles):
-    """Draw molecule from SMILES"""
     mol = Chem.MolFromSmiles(smiles)
-    if mol:
-        return Draw.MolToImage(mol, size=(300, 300))
+    return Draw.MolToImage(mol, size=(300, 300)) if mol else None
+
+def get_mordred_descriptor_names():
+    """Get all available Mordred descriptor names"""
+    # Create a temporary molecule to calculate descriptors
+    temp_mol = Chem.MolFromSmiles("CC")
+    desc_df = calc(temp_mol)
+    return list(desc_df.keys())
+
+def find_matching_descriptor(descriptor_name, available_descriptors):
+    """Find the correct Mordred descriptor name for a given feature name"""
+    descriptor_lower = descriptor_name.lower()
+    
+    # Common mappings for atom-type E-state descriptors
+    atom_type_mappings = {
+        'minaan': ['minaasn', 'min_aan', 'min(aan)', 'minaasn', 'eta_min_aan'],
+        'maxaan': ['maxaasn', 'max_aan', 'max(aan)', 'maxaasn', 'eta_max_aan'],
+        'naan': ['naasn', 'n_aan', 'n(aan)', 'eta_n_aan'],
+    }
+    
+    # Check exact match first
+    if descriptor_name in available_descriptors:
+        return descriptor_name
+    
+    # Check case-insensitive match
+    for avail_desc in available_descriptors:
+        if descriptor_lower == avail_desc.lower():
+            return avail_desc
+    
+    # Check for atom-type E-state descriptors with different naming
+    if descriptor_lower in atom_type_mappings:
+        for pattern in atom_type_mappings[descriptor_lower]:
+            for avail_desc in available_descriptors:
+                if pattern in avail_desc.lower():
+                    return avail_desc
+    
+    # Try to find partial matches
+    for avail_desc in available_descriptors:
+        if descriptor_lower in avail_desc.lower() or avail_desc.lower() in descriptor_lower:
+            return avail_desc
+    
     return None
 
 def calculate_descriptors(smiles):
@@ -80,108 +105,145 @@ def calculate_descriptors(smiles):
         raise ValueError("Invalid SMILES string")
     
     # Calculate all Mordred descriptors
-    try:
-        mordred_result = calc(mol)
-    except Exception as e:
-        raise ValueError(f"Error calculating Mordred descriptors: {str(e)}")
+    mordred_result = calc(mol)
     
     # Get all available descriptor names from Mordred
     all_descriptors = list(mordred_result.keys())
     
-    # Prepare data dictionary for model features
+    # Prepare data dictionary
     data = {}
     
-    # Feature mapping between model feature names and Mordred descriptors
-    feature_mapping = {
-        'MAXaaN': ['MAXaaN', 'Eta_max_aaN', 'max_aaN', 'max_eta_aaN', 'maxaasn'],
-        'MINaaN': ['MINaaN', 'Eta_min_aaN', 'min_aaN', 'min_eta_aaN', 'minaasn'],
-        'nN': ['nN', 'N', 'nNCount', 'num_nitrogen', 'nN'],
-        'nFARing': ['nFARing', 'nFusedAromaticRings', 'nFAR', 'num_fused_aromatic_rings'],
-        'naHRing': ['naHRing', 'nAliphaticHeterocycles', 'naHR', 'num_aliphatic_heterocycles'],
-        'MAXsCl': ['MAXsCl', 'Eta_max_sCl', 'max_sCl', 'max_eta_sCl', 'maxscl'],
-        'NaaN': ['NaaN', 'Eta_count_aaN', 'n_aaN', 'count_aaN', 'n_eta_aaN', 'naasn'],
-        'nHBAcc_Lipinski': None,  # Handled separately
-        'BCUTs-1h': ['BCUTs-1h', 'BCUTS-1h', 'bcut_s_1h', 'BCUT_s_1h'],
-        'nFAHRing': ['nFAHRing', 'nFusedAromaticHeterocycles', 'nFAHR', 'num_fused_aromatic_heterocycles'],
-        'ATSC2c': ['ATSC2c', 'ATS2c', 'ATSC_2c', 'ATS_2c'],
-        'MDEC-33': ['MDEC-33', 'MDEC33', 'mdec_33', 'mdec33'],
-        'MATS2c': ['MATS2c', 'MATS2C', 'mats_2c', 'MATS_2c']
-    }
-    
-    # Helper function to extract value from Mordred result
-    def extract_mordred_value(descriptor_list):
-        for desc_name in descriptor_list:
-            for avail_desc in all_descriptors:
-                # Case-insensitive comparison
-                if desc_name.lower() == avail_desc.lower():
-                    try:
-                        value = mordred_result[avail_desc]
-                        # Handle special types
-                        if hasattr(value, 'asdict'):
-                            # For atom-type E-state descriptors
-                            if 'max' in desc_name.lower():
-                                return float(value.asdict().get('max', 0))
-                            elif 'min' in desc_name.lower():
-                                return float(value.asdict().get('min', 0))
-                            else:
-                                return float(value)
-                        elif isinstance(value, (list, tuple)):
-                            # For descriptors that return arrays
-                            if len(value) > 0:
-                                if 'max' in desc_name.lower():
-                                    return float(max(value))
-                                elif 'min' in desc_name.lower():
-                                    return float(min(value))
-                                else:
-                                    return float(value[0])
-                            else:
-                                return 0.0
-                        else:
-                            return float(value)
-                    except Exception as e:
-                        st.warning(f"Could not extract value for {desc_name}: {str(e)}")
-                        continue
-        return 0.0
-    
-    # Calculate each feature
+    # For each feature needed by the model, try to find the corresponding descriptor
     for feature in model_features:
-        if feature == 'nHBAcc_Lipinski':
-            # Calculate Lipinski descriptor
-            try:
-                data[feature] = float(Lipinski.NumHAcceptors(mol))
-            except:
-                data[feature] = 0.0
-        elif feature in feature_mapping:
-            # Get value from Mordred using the mapping
-            mapping = feature_mapping[feature]
-            if mapping:
-                data[feature] = extract_mordred_value(mapping)
-            else:
-                data[feature] = 0.0
+        if feature == "nHBAcc_Lipinski":
+            # Calculate Lipinski descriptors separately
+            data[feature] = float(Lipinski.NumHAcceptors(mol))
         else:
-            # Try to find the descriptor directly
-            data[feature] = extract_mordred_value([feature])
+            # Try to find the matching Mordred descriptor
+            matched_desc = find_matching_descriptor(feature, all_descriptors)
+            
+            if matched_desc is not None:
+                try:
+                    # Get the value from Mordred
+                    value = mordred_result[matched_desc]
+                    # Handle various types of values
+                    if hasattr(value, 'asdict'):
+                        value = value.asdict().get('min', 0) if 'min' in str(value).lower() else value
+                    data[feature] = float(value)
+                except Exception as e:
+                    st.warning(f"Could not calculate {feature}: {str(e)}")
+                    data[feature] = 0.0
+            else:
+                # If descriptor not found, check if it's an atom-type E-state descriptor
+                if 'min' in feature.lower() and 'max' in feature.lower():
+                    # This might be a statistic descriptor, try to calculate manually
+                    try:
+                        # Get the base descriptor name (remove min/max prefix)
+                        base_name = feature[3:] if feature.lower().startswith('min') or feature.lower().startswith('max') else feature
+                        
+                        # Try to find the base descriptor
+                        for desc in all_descriptors:
+                            if base_name.lower() in desc.lower():
+                                value = mordred_result[desc]
+                                if hasattr(value, '__iter__'):
+                                    if feature.lower().startswith('min'):
+                                        data[feature] = float(min(value))
+                                    elif feature.lower().startswith('max'):
+                                        data[feature] = float(max(value))
+                                    else:
+                                        data[feature] = float(value)
+                                else:
+                                    data[feature] = float(value)
+                                break
+                        else:
+                            data[feature] = 0.0
+                    except:
+                        data[feature] = 0.0
+                else:
+                    data[feature] = 0.0
     
-    # Create DataFrame and handle infinities/NaN
+    # Create DataFrame and handle infinities
     df = pd.DataFrame([data])
-    
-    # Replace infinities and NaN with 0
-    df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.fillna(0)
-    
-    # Ensure all features are present and in correct order
-    for feature in model_features:
-        if feature not in df.columns:
-            df[feature] = 0.0
-    
-    # Reorder columns to match model_features
-    df = df[model_features]
+    df = df.replace([np.inf, -np.inf], 0)
     
     return df
 
-def create_shap_plot(desc_df, model):
-    """Create SHAP waterfall plot"""
-    try:
+# ================= HEADER =================
+st.title("SGLT2i Predictor v1.0: Predict SGLT2 inhibitor(s)")
+
+with st.expander("What is SGLT2i Predictor?", expanded=True):
+    st.write(
+        "**SGLT2i Predictor** allows users to predict the SGLT2 inhibitory activity of small molecules/drug molecules "
+        "using a machine learning model and provides SHAP-based interpretability."
+    )
+
+# ================= INPUT SECTION =================
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("✏️ Draw Molecule")
+    if KETCHER_AVAILABLE:
+        smiles_drawn = st_ketcher()
+    else:
+        smiles_drawn = ""
+        st.info("Ketcher not available. Please enter SMILES manually.")
+
+with col2:
+    st.subheader("🧬 SMILES Input")
+    smiles = st.text_input(
+        "Enter or edit SMILES",
+        value=smiles_drawn if smiles_drawn else "CC(=O)OC1=CC=CC=C1C(=O)O"  # Aspirin as example
+    )
+
+# ================= VALIDATION =================
+if not smiles:
+    st.info("Please draw a molecule or enter a SMILES string.")
+    st.stop()
+
+if not validate_smiles(smiles):
+    st.error("Invalid SMILES string.")
+    st.stop()
+
+# ================= RESULTS =================
+st.markdown("---")
+st.subheader("📊 Results")
+
+try:
+    desc_df = calculate_descriptors(smiles)
+    
+    # Display descriptor debugging info
+    with st.expander("🔍 Descriptor Debug Info"):
+        st.write(f"Model expects {len(model_features)} features:")
+        st.write(model_features)
+        st.write(f"Calculated {len(desc_df.columns)} features:")
+        st.write(list(desc_df.columns))
+        
+        # Check for missing features
+        missing_features = set(model_features) - set(desc_df.columns)
+        if missing_features:
+            st.warning(f"Missing features: {missing_features}")
+    
+    # Make prediction
+    pred = model.predict(desc_df)[0]
+    prob = model.predict_proba(desc_df)[0][1]
+    
+    col1, col2 = st.columns(2)
+
+    with col1:
+        img = draw_molecule(smiles)
+        if img:
+            st.image(img, caption="Query Molecule", width=250)
+        
+        if pred == 1:
+            st.success("🟢 **ACTIVE – SGLT2 Inhibitor**")
+        else:
+            st.error("🔴 **INACTIVE – Non-Inhibitor**")
+
+        st.metric("Confidence Score", f"{prob:.2%}")
+
+    with col2:
+        st.subheader("📈 SHAP Interpretation")
+        
         # Create SHAP explanation
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(desc_df)
@@ -195,7 +257,7 @@ def create_shap_plot(desc_df, model):
             base_val = explainer.expected_value
         
         # Create waterfall plot
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(8, 6))
         
         # Create SHAP explanation object
         explanation = shap.Explanation(
@@ -207,313 +269,75 @@ def create_shap_plot(desc_df, model):
         
         # Plot top 10 features
         shap.plots.waterfall(explanation, max_display=10, show=False)
-        plt.title("SHAP Feature Contributions", fontsize=14, pad=20)
         plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
         
-        return fig, shap_val, base_val
-    except Exception as e:
-        st.warning(f"SHAP visualization error: {str(e)}")
-        return None, None, None
-
-# ================= HEADER =================
-st.title("💊 SGLT2i Predictor v1.0")
-st.markdown("Predict SGLT2 inhibitory activity of small molecules")
-
-with st.expander("ℹ️ About this tool", expanded=False):
-    st.write("""
-    **SGLT2i Predictor** is a machine learning-based tool that predicts the Sodium-Glucose Cotransporter 2 (SGLT2) 
-    inhibitory activity of small molecules. 
-    
-    **Features:**
-    - Predicts whether a molecule is an SGLT2 inhibitor
-    - Provides confidence scores
-    - SHAP-based interpretability shows feature contributions
-    - Calculates 13 key molecular descriptors
-    
-    **Model Information:**
-    - Algorithm: Gradient Boosting Classifier
-    - Features: 13 molecular descriptors
-    - Training: Validated on known SGLT2 inhibitors
-    
-    **Note:** This tool is for research purposes only.
-    """)
-
-# ================= INPUT SECTION =================
-st.markdown("---")
-st.subheader("🔬 Input Molecule")
-
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.markdown("#### ✏️ Draw Molecule")
-    if KETCHER_AVAILABLE:
-        smiles_drawn = st_ketcher()
-        if smiles_drawn and smiles_drawn != "":
-            st.success(f"Drawn molecule loaded: {smiles_drawn[:50]}...")
-    else:
-        st.info("Ketcher not available. Please enter SMILES manually.")
-        smiles_drawn = ""
-
-with col2:
-    st.markdown("#### 🧬 SMILES Input")
-    
-    # Example molecules
-    example_molecules = {
-        "Select example...": "",
-        "Dapagliflozin (SGLT2 inhibitor)": "CCCCCC1=CC(=C(C(=C1)C2C(C(C(O2)CO)O)O)OC3C(C(C(C(O3)CO)O)O)O)O)OC4C(C(C(C(O4)CO)O)O)O",
-        "Aspirin (non-inhibitor)": "CC(=O)OC1=CC=CC=C1C(=O)O",
-        "Canagliflozin (SGLT2 inhibitor)": "CC1=CC(=C(C=C1OC2C(C(C(O2)COC3=CC=C(C=C3)F)O)O)F)C4=CC(=C(C(=C4)Cl)O)Cl",
-        "Glucose (control)": "C(C1C(C(C(C(O1)O)O)O)O)O"
-    }
-    
-    example_choice = st.selectbox("Load example molecule:", list(example_molecules.keys()))
-    
-    if example_choice != "Select example...":
-        default_smiles = example_molecules[example_choice]
-    else:
-        default_smiles = smiles_drawn if smiles_drawn else "CC(=O)OC1=CC=CC=C1C(=O)O"
-    
-    smiles = st.text_area(
-        "Enter SMILES string:",
-        value=default_smiles,
-        height=100,
-        help="Enter a valid SMILES string or use the example molecules"
-    )
-
-# ================= VALIDATION =================
-if not smiles or smiles.strip() == "":
-    st.info("👈 Please draw a molecule or enter a SMILES string.")
-    st.stop()
-
-if not validate_smiles(smiles):
-    st.error("❌ Invalid SMILES string. Please check the format and try again.")
-    st.stop()
-
-# Display molecule
-st.markdown("#### 📐 Molecule Visualization")
-mol_img = draw_molecule(smiles)
-if mol_img:
-    st.image(mol_img, caption="Input Molecule", width=300)
-else:
-    st.warning("Could not visualize molecule")
-
-# ================= CALCULATION & PREDICTION =================
-st.markdown("---")
-st.subheader("📊 Prediction Results")
-
-try:
-    # Show loading spinner
-    with st.spinner("Calculating molecular descriptors and making prediction..."):
-        # Calculate descriptors
-        desc_df = calculate_descriptors(smiles)
-        
-        # Make prediction
-        pred = model.predict(desc_df)[0]
-        prob = model.predict_proba(desc_df)[0][1]
-        confidence = prob if pred == 1 else (1 - prob)
-    
-    # Display results
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.markdown("#### 🎯 Prediction")
-        
-        # Display prediction with color
-        if pred == 1:
-            st.success(f"""
-            ### 🟢 ACTIVE - SGLT2 Inhibitor
-            **Probability:** {prob:.2%}
-            """)
-        else:
-            st.error(f"""
-            ### 🔴 INACTIVE - Non-Inhibitor
-            **Probability:** {(1-prob):.2%}
-            """)
-        
-        # Confidence gauge
-        st.markdown("#### 📈 Confidence")
-        progress_value = confidence
-        st.progress(float(progress_value))
-        st.caption(f"Confidence: {confidence:.2%}")
-        
-        # Additional metrics
-        st.markdown("#### 📋 Quick Stats")
-        col_stat1, col_stat2 = st.columns(2)
-        with col_stat1:
-            st.metric("Descriptor Count", len(model_features))
-        with col_stat2:
-            st.metric("Active Probability", f"{prob:.2%}")
-    
-    with col2:
-        st.markdown("#### 🔍 SHAP Interpretation")
-        
-        # Create SHAP plot
-        fig, shap_val, base_val = create_shap_plot(desc_df, model)
-        
-        if fig:
-            st.pyplot(fig)
-            plt.close()
-            
-            # SHAP values table
-            with st.expander("📋 Detailed SHAP Values", expanded=False):
-                if shap_val is not None:
-                    shap_df = pd.DataFrame({
-                        'Feature': desc_df.columns,
-                        'SHAP Value': shap_val,
-                        'Feature Value': desc_df.iloc[0].values,
-                        'Absolute Impact': np.abs(shap_val)
-                    }).sort_values('Absolute Impact', ascending=False)
-                    
-                    st.dataframe(
-                        shap_df.head(15),
-                        use_container_width=True,
-                        column_config={
-                            "Feature": st.column_config.TextColumn("Feature"),
-                            "SHAP Value": st.column_config.NumberColumn(
-                                "SHAP Value",
-                                format="%.4f"
-                            ),
-                            "Feature Value": st.column_config.NumberColumn(
-                                "Feature Value",
-                                format="%.4f"
-                            ),
-                            "Absolute Impact": st.column_config.NumberColumn(
-                                "Absolute Impact",
-                                format="%.4f"
-                            )
-                        }
-                    )
-        else:
-            st.info("SHAP visualization not available for this prediction.")
+        # Additional SHAP summary
+        with st.expander("📋 SHAP Summary"):
+            st.write("Feature contributions to prediction:")
+            feature_contributions = pd.DataFrame({
+                'Feature': desc_df.columns,
+                'SHAP Value': shap_val,
+                'Feature Value': desc_df.iloc[0].values
+            })
+            feature_contributions['Absolute Impact'] = np.abs(feature_contributions['SHAP Value'])
+            feature_contributions = feature_contributions.sort_values('Absolute Impact', ascending=False)
+            st.dataframe(feature_contributions.head(15), use_container_width=True)
 
 except Exception as e:
-    st.error(f"❌ Error during prediction: {str(e)}")
-    st.info("""
-    **Possible issues:**
-    1. The molecule may be too complex
-    2. Descriptor calculation failed
-    3. Model compatibility issue
-    
-    Try a simpler molecule or check the SMILES format.
-    """)
+    st.error(f"Error calculating descriptors or making prediction: {str(e)}")
+    st.info("Please try a different molecule or check the SMILES string.")
     st.stop()
 
-# ================= DESCRIPTOR DETAILS =================
-with st.expander("🔬 Calculated Descriptors", expanded=False):
-    st.markdown(f"**Model uses {len(model_features)} features:**")
+# ================= DESCRIPTORS =================
+with st.expander("🔬 Calculated Descriptors"):
+    st.dataframe(desc_df.T.rename(columns={0: "Value"}).round(6), use_container_width=True)
     
-    # Display descriptors in a nice table
-    desc_table = pd.DataFrame({
-        'Descriptor': desc_df.columns,
-        'Value': desc_df.iloc[0].values,
-        'Type': ['Atom-type E-state' if 'aaN' in feat or 'sCl' in feat else 
-                'Count' if feat.startswith('n') else 
-                'BCUT' if 'BCUT' in feat else 
-                'Autocorrelation' if 'ATS' in feat or 'MATS' in feat else 
-                'Topological' if 'MDEC' in feat else 
-                'Lipinski' if 'Lipinski' in feat else 'Other'
-                for feat in desc_df.columns]
-    })
-    
-    st.dataframe(
-        desc_table,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Descriptor": st.column_config.TextColumn("Descriptor"),
-            "Value": st.column_config.NumberColumn("Value", format="%.6f"),
-            "Type": st.column_config.TextColumn("Type")
-        }
-    )
-    
-    # Statistics
-    st.markdown("#### 📊 Descriptor Statistics")
-    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
-    with stat_col1:
-        st.metric("Mean", f"{desc_df.values.mean():.4f}")
-    with stat_col2:
-        st.metric("Std Dev", f"{desc_df.values.std():.4f}")
-    with stat_col3:
-        st.metric("Min", f"{desc_df.values.min():.4f}")
-    with stat_col4:
-        st.metric("Max", f"{desc_df.values.max():.4f}")
-
-# ================= DEBUG INFORMATION =================
-if st.session_state.get('debug_mode', False):
-    with st.expander("🐛 Debug Information", expanded=False):
-        st.write("**Model Features:**", model_features)
-        st.write("**Calculated Features:**", list(desc_df.columns))
-        
-        # Check for mismatches
-        missing = set(model_features) - set(desc_df.columns)
-        extra = set(desc_df.columns) - set(model_features)
-        
-        if missing:
-            st.warning(f"Missing features: {list(missing)}")
-        if extra:
-            st.info(f"Extra features calculated: {list(extra)}")
-        
-        st.write("**Raw descriptor values:**")
-        st.json(desc_df.iloc[0].to_dict())
-
-# ================= SIDEBAR =================
-with st.sidebar:
-    st.title("ℹ️ About")
-    
-    st.markdown("""
-    ### Model Features
-    
-    The model uses 13 key molecular descriptors:
-    
-    1. **MAXaaN** - Maximum aaN atom-type E-state
-    2. **MINaaN** - Minimum aaN atom-type E-state
-    3. **nN** - Number of Nitrogen atoms
-    4. **nFARing** - Number of fused aromatic rings
-    5. **naHRing** - Number of aliphatic heterocycles
-    6. **MAXsCl** - Maximum sCl atom-type E-state
-    7. **NaaN** - Number of aaN atoms
-    8. **nHBAcc_Lipinski** - Hydrogen bond acceptors (Lipinski)
-    9. **BCUTs-1h** - BCUT descriptor
-    10. **nFAHRing** - Number of fused aromatic heterocycles
-    11. **ATSC2c** - Autocorrelation descriptor
-    12. **MDEC-33** - Molecular distance edge descriptor
-    13. **MATS2c** - Moran autocorrelation descriptor
-    """)
-    
-    st.markdown("---")
-    
-    st.markdown("### 📚 Example Molecules")
-    st.info("""
-    Try these examples:
-    - **Dapagliflozin**: SGLT2 inhibitor
-    - **Aspirin**: Non-inhibitor control
-    - **Canagliflozin**: SGLT2 inhibitor
-    - **Glucose**: Natural substrate
-    """)
-    
-    st.markdown("---")
-    
-    st.markdown("### ⚙️ Settings")
-    debug_mode = st.checkbox("Enable Debug Mode", False)
-    st.session_state['debug_mode'] = debug_mode
-    
-    if debug_mode:
-        st.warning("Debug mode enabled. Additional information will be shown.")
-    
-    st.markdown("---")
-    
-    st.markdown("### ⚠️ Disclaimer")
-    st.caption("""
-    This tool is for **research purposes only**.
-    Not for clinical decision-making.
-    Always verify predictions with experimental data.
-    """)
+    # Show statistics
+    col_stat1, col_stat2, col_stat3 = st.columns(3)
+    with col_stat1:
+        st.metric("Total Descriptors", len(desc_df.columns))
+    with col_stat2:
+        st.metric("Non-zero Values", (desc_df != 0).sum().sum())
+    with col_stat3:
+        st.metric("Mean Absolute Value", f"{desc_df.abs().mean().mean():.4f}")
 
 # ================= FOOTER =================
 st.markdown("---")
-st.markdown("""
-<div style="text-align: center;">
-    <p>💊 <b>SGLT2i Prediction Tool</b> | Built with Streamlit, RDKit, and Mordred</p>
-    <p><small>For research use only. Predictions should be validated experimentally.</small></p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <center>
+    🧪 <b>SGLT2i Prediction Tool</b> | Built with Streamlit<br>
+    <small>For research use only. Not for clinical decision making.</small>
+    </center>
+    """,
+    unsafe_allow_html=True
+)
+
+# ================= SIDEBAR INFO =================
+with st.sidebar:
+    st.header("ℹ️ About")
+    st.write("""
+    This tool predicts SGLT2 inhibitory activity using:
+    - **Machine Learning**: Gradient Boosting model
+    - **Descriptors**: 13 key molecular descriptors
+    - **Interpretability**: SHAP-based feature importance
+    
+    **Model Features:**
+    1. MAXaaN - Maximum aaN atom-type E-state
+    2. MINaaN - Minimum aaN atom-type E-state
+    3. nN - Number of Nitrogen atoms
+    4. nFARing - Number of fused aromatic rings
+    5. naHRing - Number of aliphatic heterocycles
+    6. MAXsCl - Maximum sCl atom-type E-state
+    7. NaaN - Number of aaN atoms
+    8. nHBAcc_Lipinski - Hydrogen bond acceptors (Lipinski)
+    9. BCUTs-1h - BCUT descriptor
+    10. nFAHRing - Number of fused aromatic heterocycles
+    11. ATSC2c - Autocorrelation descriptor
+    12. MDEC-33 - Molecular distance edge descriptor
+    13. MATS2c - Moran autocorrelation descriptor
+    """)
+    
+    st.info("💡 **Tip**: Try common SGLT2 inhibitors like Dapagliflozin (CCCCCC1=CC(=C(C(=C1)C2C(C(C(O2)CO)O)O)OC3C(C(C(C(O3)CO)O)O)O)O)OC4C(C(C(C(O4)CO)O)O)O)")
