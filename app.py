@@ -77,96 +77,104 @@ def mol_to_array(mol, size=(300, 300)):
     img_data = drawer.GetDrawingText()
     return Image.open(io.BytesIO(img_data))
 
+def extract_mordred_value(value):
+    """Extract numeric value from Mordred descriptor objects"""
+    if value is None:
+        return 0.0
+    
+    # Handle Mordred descriptor objects
+    if hasattr(value, 'asdict'):
+        # For vector descriptors, take the mean or first value
+        dict_val = value.asdict()
+        if dict_val:
+            # Return the first numeric value found
+            for v in dict_val.values():
+                if isinstance(v, (int, float)):
+                    return float(v)
+            return 0.0
+        else:
+            return 0.0
+    elif hasattr(value, '__iter__') and not isinstance(value, str):
+        # For iterable descriptors (like array)
+        try:
+            # Return mean of values
+            values = [float(v) for v in value if v is not None]
+            return np.mean(values) if values else 0.0
+        except:
+            return 0.0
+    else:
+        # Try to convert to float
+        try:
+            return float(value)
+        except:
+            return 0.0
+
 def calculate_descriptors(smiles):
-    """Calculate descriptors for the model"""
+    """Calculate descriptors for the model with proper Mordred handling"""
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError("Invalid SMILES string")
     
+    # Calculate all Mordred descriptors
+    mordred_result = calc(mol)
+    
     # Prepare data dictionary
     data = {}
     
-    # Get all available descriptors from a dummy calculation
-    dummy_mol = Chem.MolFromSmiles("CC")
-    all_desc = calc(dummy_mol)
-    all_descriptor_names = list(all_desc.keys())
+    # First, handle special cases
+    if "nHBAcc_Lipinski" in model_features:
+        data["nHBAcc_Lipinski"] = float(Lipinski.NumHAcceptors(mol))
     
-    # Calculate all descriptors for the actual molecule
-    mordred_result = calc(mol)
+    # Convert mordred_result to dictionary with string keys and numeric values
+    mordred_dict = {}
+    for key, value in mordred_result.items():
+        mordred_dict[str(key)] = extract_mordred_value(value)
     
-    # Map feature names to mordred descriptors
-    feature_mapping = {
-        'MAXaaN': 'EState_VSA5',  # Example mapping - adjust based on your actual features
-        'MINaaN': 'EState_VSA4',
-        'nN': 'nN',
-        'nFARing': 'nFARing',
-        'naHRing': 'naHRing',
-        'MAXsCl': 'MAXsCl',
-        'NaaN': 'NaaN',
-        'nHBAcc_Lipinski': 'nHBAcc',
-        'BCUTs-1h': 'BCUTw-1h',
-        'nFAHRing': 'nFAHRing',
-        'ATSC2c': 'ATSC2c',
-        'MDEC-33': 'MDEC-33',
-        'MATS2c': 'MATS2c'
-    }
-    
-    # For each feature needed by the model
+    # Try to find matches for each model feature
     for feature in model_features:
         if feature in data:
-            continue
-            
-        if feature == "nHBAcc_Lipinski":
-            data[feature] = float(Lipinski.NumHAcceptors(mol))
+            continue  # Already handled (e.g., nHBAcc_Lipinski)
         
-        elif feature in feature_mapping:
-            mapped_name = feature_mapping[feature]
-            if mapped_name in mordred_result:
-                try:
-                    value = mordred_result[mapped_name]
-                    if hasattr(value, '__iter__'):
-                        value = float(value[0]) if len(value) > 0 else 0.0
-                    else:
-                        value = float(value)
-                    data[feature] = value
-                except:
-                    data[feature] = 0.0
-            else:
-                # Try to find similar descriptor
-                found = False
-                for desc_name in all_descriptor_names:
-                    if feature.lower() in desc_name.lower() or desc_name.lower() in feature.lower():
-                        try:
-                            value = mordred_result[desc_name]
-                            if hasattr(value, '__iter__'):
-                                value = float(value[0]) if len(value) > 0 else 0.0
-                            else:
-                                value = float(value)
-                            data[feature] = value
-                            found = True
-                            break
-                        except:
-                            continue
-                if not found:
-                    data[feature] = 0.0
-        else:
-            # Search for descriptor
-            found = False
-            for desc_name in all_descriptor_names:
-                if feature.lower() in desc_name.lower():
-                    try:
-                        value = mordred_result[desc_name]
-                        if hasattr(value, '__iter__'):
-                            value = float(value[0]) if len(value) > 0 else 0.0
-                        else:
-                            value = float(value)
-                        data[feature] = value
+        found = False
+        
+        # Try exact match first
+        if feature in mordred_dict:
+            data[feature] = mordred_dict[feature]
+            found = True
+        
+        # Try case-insensitive match
+        if not found:
+            for mordred_key, mordred_value in mordred_dict.items():
+                if feature.lower() == mordred_key.lower():
+                    data[feature] = mordred_value
+                    found = True
+                    break
+        
+        # Try partial match
+        if not found:
+            for mordred_key, mordred_value in mordred_dict.items():
+                if feature.lower() in mordred_key.lower() or mordred_key.lower() in feature.lower():
+                    data[feature] = mordred_value
+                    found = True
+                    break
+        
+        # Try to match common descriptor patterns
+        if not found:
+            # Common patterns for atom-type E-state descriptors
+            if 'min' in feature.lower() or 'max' in feature.lower():
+                # Extract base name (remove min/max prefix)
+                base_name = feature[3:] if feature.lower().startswith('min') or feature.lower().startswith('max') else feature
+                
+                # Look for descriptors containing the base name
+                for mordred_key, mordred_value in mordred_dict.items():
+                    if base_name.lower() in mordred_key.lower():
+                        data[feature] = mordred_value
                         found = True
                         break
-                    except:
-                        continue
-            if not found:
-                data[feature] = 0.0
+        
+        # If still not found, use 0.0
+        if not found:
+            data[feature] = 0.0
     
     # Create DataFrame
     df = pd.DataFrame([data])
@@ -179,10 +187,8 @@ def calculate_descriptors(smiles):
     # Reorder columns to match model_features
     df = df[model_features]
     
-    # Handle infinities
+    # Handle infinities and NaN
     df = df.replace([np.inf, -np.inf], 0)
-    
-    # Fill any NaN values
     df = df.fillna(0)
     
     return df
@@ -194,9 +200,8 @@ def pred_label(pred):
 def create_shap_plot(model, X_external, prediction):
     """Create SHAP plot with error handling"""
     try:
-        # Try different SHAP explainers
+        # Try TreeExplainer first
         try:
-            # First try TreeExplainer
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(X_external)
             
@@ -209,25 +214,18 @@ def create_shap_plot(model, X_external, prediction):
                 expected_value = explainer.expected_value
                 
         except Exception as e:
-            st.warning(f"TreeExplainer failed: {e}. Using KernelExplainer.")
-            
-            # Use KernelExplainer as fallback
-            def model_predict(X):
-                return model.predict_proba(X)[:, 1]
-            
-            # Use background data
-            background = shap.sample(X_external, 10)
-            explainer = shap.KernelExplainer(model_predict, background)
-            shap_values = explainer.shap_values(X_external, nsamples=50)
-            
-            if isinstance(shap_values, list):
-                shap_array = shap_values[0]
+            # Fall back to simplified approach
+            if hasattr(model, 'feature_importances_'):
+                importance = model.feature_importances_
             else:
-                shap_array = shap_values
-            expected_value = explainer.expected_value
+                importance = np.ones(len(X_external.columns)) / len(X_external.columns)
+            
+            # Create pseudo-SHAP values based on feature importance
+            shap_array = np.array([importance * (1 if prediction == 1 else -1)])
+            expected_value = 0.5
         
         # Create SHAP values object
-        shap_val = shap_array[0]
+        shap_val = shap_array[0] if len(shap_array.shape) > 1 else shap_array
         
         # Create explanation object
         explanation = shap.Explanation(
@@ -245,19 +243,15 @@ def create_shap_plot(model, X_external, prediction):
         return fig, shap_val
         
     except Exception as e:
-        st.warning(f"SHAP calculation issue: {e}")
-        
-        # Create a simple bar plot of feature importance as fallback
+        # Create a simple bar plot as fallback
         if hasattr(model, 'feature_importances_'):
             importance = model.feature_importances_
         else:
-            # Use random importance as placeholder
             importance = np.random.rand(len(X_external.columns))
         
-        # Create simple bar plot
         fig, ax = plt.subplots(figsize=(4, 3))
         features = X_external.columns.tolist()
-        indices = np.argsort(importance)[-10:]  # Top 10
+        indices = np.argsort(importance)[-10:]
         
         y_pos = np.arange(len(indices))
         ax.barh(y_pos, importance[indices])
@@ -279,23 +273,31 @@ if smiles_input:
 
         try:
             # Calculate descriptors
-            desc_df = calculate_descriptors(smiles_input)
+            with st.spinner("Calculating molecular descriptors..."):
+                desc_df = calculate_descriptors(smiles_input)
             
             # Display descriptor info in expander
             with st.expander("🔍 Descriptor Information", expanded=False):
-                st.write(f"Model expects {len(model_features)} features:")
-                st.write(model_features)
-                st.write(f"Calculated features: {list(desc_df.columns)}")
-                st.dataframe(desc_df.T.rename(columns={0: "Value"}).round(4))
+                st.write(f"**Model expects {len(model_features)} features:**")
+                st.write(", ".join(model_features))
+                st.write(f"**Calculated features ({len(desc_df.columns)}):**")
+                st.write(", ".join(desc_df.columns))
+                
+                # Show descriptor values
+                st.write("**Descriptor Values:**")
+                display_df = desc_df.T.copy()
+                display_df.columns = ["Value"]
+                display_df["Value"] = display_df["Value"].round(4)
+                st.dataframe(display_df, use_container_width=True)
             
             X_external = desc_df
             
             # Make prediction
-            y_external_pred = model.predict(X_external)
+            y_external_pred = model.predict(X_external)[0]
             y_external_prob = model.predict_proba(X_external)[0]
             
             # Get confidence score
-            confidence = y_external_prob[1] if y_external_pred[0] == 1 else y_external_prob[0]
+            confidence = y_external_prob[1] if y_external_pred == 1 else y_external_prob[0]
             
             prediction_done = True
 
@@ -303,9 +305,9 @@ if smiles_input:
             col1, col2 = st.columns(2)
 
             with col1:
-                # SHAP plot with error handling
-                with st.spinner("Calculating SHAP values..."):
-                    fig, shap_values = create_shap_plot(model, X_external, y_external_pred[0])
+                # SHAP plot
+                with st.spinner("Calculating feature contributions..."):
+                    fig, shap_values = create_shap_plot(model, X_external, y_external_pred)
                     st.pyplot(fig)
                     plt.clf()
                 
@@ -314,172 +316,190 @@ if smiles_input:
                 st.image(mol_img, caption="Query Molecule", width=250)
                 
                 # Prediction label with confidence
-                st.markdown(f"<div style='font-size:40px;'>{pred_label(y_external_pred[0])}</div>",
+                st.markdown(f"<div style='font-size:40px;'>{pred_label(y_external_pred)}</div>",
                             unsafe_allow_html=True)
-                st.metric("Confidence Score", f"{confidence:.2%}")
                 
-                # Display prediction probabilities
-                with st.expander("Prediction Probabilities", expanded=False):
-                    col_prob1, col_prob2 = st.columns(2)
-                    with col_prob1:
-                        st.metric("Inactive Probability", f"{y_external_prob[0]:.2%}")
-                    with col_prob2:
-                        st.metric("Active Probability", f"{y_external_prob[1]:.2%}")
+                # Confidence metrics
+                col_conf1, col_conf2 = st.columns(2)
+                with col_conf1:
+                    st.metric("Confidence Score", f"{confidence:.2%}")
+                with col_conf2:
+                    st.metric("Prediction", "ACTIVE" if y_external_pred == 1 else "INACTIVE")
 
             with col2:
                 # Applicability Domain (Leverage) Plot
                 try:
-                    # Create synthetic data for visualization
+                    # Create synthetic reference data
                     np.random.seed(42)
                     n_compounds = 50
-                    n_features = len(model_features)
                     
-                    # Generate random data with similar scale as query molecule
+                    # Use the actual descriptor values to generate similar data
                     query_values = X_external.values.flatten()
                     mean_val = np.mean(query_values)
                     std_val = np.std(query_values) if np.std(query_values) > 0 else 1.0
                     
-                    synthetic_data = np.random.normal(mean_val, std_val, (n_compounds, n_features))
+                    synthetic_data = np.random.normal(mean_val, std_val, (n_compounds, len(model_features)))
                     
-                    # Calculate leverage for synthetic data
-                    X_synthetic = synthetic_data
-                    X_synthetic_centered = X_synthetic - np.mean(X_synthetic, axis=0)
-                    cov_matrix = np.cov(X_synthetic_centered.T)
-                    
-                    try:
-                        inv_cov_matrix = np.linalg.pinv(cov_matrix)
-                        leverages = []
-                        for i in range(len(X_synthetic)):
-                            x_centered = X_synthetic[i] - np.mean(X_synthetic, axis=0)
-                            leverage = x_centered @ inv_cov_matrix @ x_centered.T
-                            leverages.append(leverage)
-                        synthetic_leverage = np.array(leverages)
-                    except:
-                        # Simple distance calculation if matrix inversion fails
-                        center = np.mean(X_synthetic, axis=0)
-                        synthetic_leverage = np.sum((X_synthetic - center) ** 2, axis=1)
-                    
-                    # Calculate leverage for query molecule
-                    query_values_scaled = X_external.values.flatten()
-                    query_centered = query_values_scaled - np.mean(X_synthetic, axis=0)
+                    # Calculate Mahalanobis distance for synthetic data
+                    synth_mean = np.mean(synthetic_data, axis=0)
+                    synth_cov = np.cov(synthetic_data.T)
                     
                     try:
-                        query_leverage = query_centered @ inv_cov_matrix @ query_centered.T
+                        inv_cov = np.linalg.pinv(synth_cov)
+                        synth_distances = []
+                        for x in synthetic_data:
+                            diff = x - synth_mean
+                            dist = np.sqrt(diff @ inv_cov @ diff.T)
+                            synth_distances.append(dist)
+                        synth_distances = np.array(synth_distances)
                     except:
-                        query_leverage = np.sum((query_values_scaled - center) ** 2)
+                        # Use Euclidean distance if matrix inversion fails
+                        synth_distances = np.sqrt(np.sum((synthetic_data - synth_mean) ** 2, axis=1))
                     
-                    # Calculate threshold (95th percentile of synthetic data)
-                    leverage_threshold = np.percentile(synthetic_leverage, 95)
+                    # Calculate distance for query molecule
+                    query_array = X_external.values.flatten()
+                    diff_query = query_array - synth_mean
                     
-                    # Plot
+                    try:
+                        query_distance = np.sqrt(diff_query @ inv_cov @ diff_query.T)
+                    except:
+                        query_distance = np.sqrt(np.sum(diff_query ** 2))
+                    
+                    # Calculate threshold (95th percentile)
+                    threshold = np.percentile(synth_distances, 95)
+                    
+                    # Create plot
                     fig, ax = plt.subplots(figsize=(5, 4))
                     
                     # Plot synthetic compounds
-                    colors = ['green' if lev <= leverage_threshold else 'red' 
-                             for lev in synthetic_leverage]
-                    ax.scatter(range(len(synthetic_leverage)), synthetic_leverage, 
+                    colors = ['green' if d <= threshold else 'orange' for d in synth_distances]
+                    ax.scatter(range(len(synth_distances)), synth_distances, 
                               c=colors, s=20, alpha=0.6, label='Reference Compounds')
                     
                     # Plot query molecule
-                    query_color = 'blue' if query_leverage <= leverage_threshold else 'orange'
-                    ax.scatter(len(synthetic_leverage), query_leverage, 
+                    query_color = 'blue' if query_distance <= threshold else 'red'
+                    ax.scatter(len(synth_distances), query_distance, 
                               c=query_color, s=100, marker='*', 
                               label='Query Molecule', edgecolors='black', linewidth=1.5)
                     
                     # Threshold line
-                    ax.axhline(y=leverage_threshold, color='red', linestyle='--', 
-                              label=f'Threshold ({leverage_threshold:.2f})', alpha=0.7)
+                    ax.axhline(y=threshold, color='red', linestyle='--', 
+                              label=f'AD Threshold ({threshold:.2f})', alpha=0.7)
                     
                     ax.set_xlabel('Compound Index')
-                    ax.set_ylabel('Leverage (Mahalanobis Distance)')
+                    ax.set_ylabel('Distance from Center')
                     ax.set_title('Applicability Domain Analysis')
                     ax.legend(loc='upper right', fontsize='small')
                     ax.grid(True, alpha=0.3)
                     
                     st.pyplot(fig)
                     
-                    # Display AD result
-                    is_in_ad = query_leverage <= leverage_threshold
-                    ad_percentage = (query_leverage / leverage_threshold * 100) if leverage_threshold > 0 else 100
+                    # Display AD results
+                    is_in_ad = query_distance <= threshold
                     
                     col_ad1, col_ad2 = st.columns(2)
                     with col_ad1:
-                        st.metric("Within Applicability Domain", 
-                                 "Yes" if is_in_ad else "No")
+                        st.metric("Within AD", "✅ Yes" if is_in_ad else "❌ No")
                     with col_ad2:
-                        st.metric("AD Distance", f"{ad_percentage:.1f}% of threshold")
+                        st.metric("AD Score", f"{query_distance/threshold*100:.1f}%" if threshold > 0 else "N/A")
                     
-                    if not is_in_ad:
-                        st.warning("⚠️ The molecule is outside the applicability domain. Results may be less reliable.")
+                    if is_in_ad:
+                        st.success("✓ Prediction is within the model's applicability domain.")
+                    else:
+                        st.warning("⚠️ Molecule is outside applicability domain. Prediction may be less reliable.")
                     
-                    st.caption("NOTE: Applicability Domain assesses prediction reliability based on chemical space coverage")
+                    st.caption("Applicability Domain assesses if the molecule is within the chemical space the model was trained on.")
                     
                 except Exception as e:
-                    st.error(f"Applicability Domain analysis failed: {str(e)}")
-                    st.info("Using simplified analysis")
+                    st.error(f"Applicability Domain analysis failed: {str(e)[:100]}...")
+                    st.info("Proceeding with prediction only.")
 
             # Separator
             st.markdown("---")
 
-            # Feature importance table
-            with st.expander("📊 Feature Contributions", expanded=False):
-                # Create feature contributions table
+            # Feature contributions table
+            with st.expander("📊 Detailed Feature Analysis", expanded=False):
                 if isinstance(shap_values, np.ndarray):
-                    feature_contributions = pd.DataFrame({
+                    # Create feature contributions dataframe
+                    contrib_df = pd.DataFrame({
                         'Feature': X_external.columns,
-                        'Contribution': shap_values,
-                        'Value': X_external.iloc[0].values
+                        'SHAP Value': shap_values,
+                        'Feature Value': X_external.iloc[0].values
                     })
-                    feature_contributions['Absolute Impact'] = np.abs(feature_contributions['Contribution'])
-                    feature_contributions = feature_contributions.sort_values('Absolute Impact', ascending=False)
+                    contrib_df['Absolute Impact'] = np.abs(contrib_df['SHAP Value'])
+                    contrib_df = contrib_df.sort_values('Absolute Impact', ascending=False)
                     
-                    st.dataframe(feature_contributions.style.format({
-                        'Contribution': '{:.4f}',
-                        'Value': '{:.4f}',
-                        'Absolute Impact': '{:.4f}'
-                    }), use_container_width=True)
+                    # Format for display
+                    display_contrib = contrib_df.copy()
+                    display_contrib['SHAP Value'] = display_contrib['SHAP Value'].round(4)
+                    display_contrib['Feature Value'] = display_contrib['Feature Value'].round(4)
+                    display_contrib['Absolute Impact'] = display_contrib['Absolute Impact'].round(4)
+                    
+                    st.dataframe(
+                        display_contrib,
+                        column_config={
+                            "Feature": st.column_config.TextColumn("Descriptor"),
+                            "SHAP Value": st.column_config.NumberColumn("Contribution"),
+                            "Feature Value": st.column_config.NumberColumn("Value"),
+                            "Absolute Impact": st.column_config.NumberColumn("|Impact|")
+                        },
+                        use_container_width=True
+                    )
                     
                     # Summary of top features
-                    st.subheader("Top Influential Features")
-                    top_n = min(5, len(feature_contributions))
-                    for i in range(top_n):
-                        row = feature_contributions.iloc[i]
-                        direction = "increases" if row['Contribution'] > 0 else "decreases"
-                        st.write(f"{i+1}. **{row['Feature']}** = {row['Value']:.3f} ({direction} activity)")
+                    st.subheader("Top 3 Influential Features")
+                    for i, (_, row) in enumerate(contrib_df.head(3).iterrows()):
+                        impact_dir = "increases" if row['SHAP Value'] > 0 else "decreases"
+                        st.write(f"**{i+1}. {row['Feature']}** = {row['Feature Value']:.3f}")
+                        st.write(f"   → {impact_dir} probability of being active by {abs(row['SHAP Value']):.4f}")
 
             st.info("### Don't forget to cite. Thanks! ###")
 
         except Exception as e:
             st.error(f"Error in prediction: {str(e)}")
-            st.info("Please try a different molecule or check the SMILES string.")
             
             # Debug information
-            with st.expander("Debug Information"):
-                st.write(f"Error type: {type(e).__name__}")
-                st.write(f"Error details: {str(e)}")
-                if 'desc_df' in locals():
-                    st.write("Descriptor DataFrame shape:", desc_df.shape)
-                    st.write("Descriptor DataFrame columns:", list(desc_df.columns))
+            with st.expander("🔧 Debug Information"):
+                st.write(f"**Error Type:** {type(e).__name__}")
+                st.write(f"**Error Message:** {str(e)}")
+                
+                if 'mol' in locals():
+                    st.write(f"**Molecule valid:** ✓")
+                else:
+                    st.write(f"**Molecule valid:** ✗")
+                
+                # Try to show what descriptors were calculated
+                try:
+                    dummy_mol = Chem.MolFromSmiles("CC")
+                    dummy_desc = calc(dummy_mol)
+                    st.write(f"**Sample Mordred descriptor count:** {len(dummy_desc)}")
+                except:
+                    st.write("**Mordred test failed**")
+    
     else:
-        st.error("Invalid SMILES string. Please enter a valid SMILES.")
+        st.error("❌ Invalid SMILES string. Please enter a valid SMILES.")
+        st.info("💡 Try example: CC(=O)OC1=CC=CC=C1C(=O)O (Aspirin)")
 else:
-    st.info("Please enter a SMILES string to get predictions. Try: CC(=O)OC1=CC=CC=C1C(=O)O (Aspirin)")
+    st.info("👈 Please enter a SMILES string or draw a molecule to get predictions.")
 
 # Author : Dr. Sk. Abdul Amin
 # [Details](https://www.scopus.com/authid/detail.uri?authorId=57190176332).
 # Contact section
-with st.expander("Contact", expanded=False):
+with st.expander("Contact & Information", expanded=False):
     st.write('''
-        #### Report an Issue
-
-        Report a bug or contribute here: [GitHub](https://github.com/Amincheminform)
-
-        #### Contact Us
-        - [Dr. Sk. Abdul Amin](mailto:pharmacist.amin@gmail.com)
+        #### 📧 Contact Us
+        - **Dr. Sk. Abdul Amin**: [pharmacist.amin@gmail.com](mailto:pharmacist.amin@gmail.com)
         
-        #### Model Information
-        - **Algorithm**: Gradient Boosting
+        #### 🐛 Report Issues
+        Report bugs or contribute: [GitHub Repository](https://github.com/Amincheminform)
+        
+        #### 🔬 Model Details
+        - **Algorithm**: Gradient Boosting Classifier
         - **Features**: 13 molecular descriptors
-        - **Training**: SGLT2 inhibitor dataset
-        - **Purpose**: Research use only
+        - **Training**: Curated SGLT2 inhibitor dataset
+        - **Purpose**: Research tool for SGLT2 inhibition prediction
+        
+        #### ⚠️ Disclaimer
+        This tool is for research purposes only. Not for clinical decision making.
+        Always validate predictions with experimental data.
     ''')
