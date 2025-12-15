@@ -484,12 +484,6 @@ with st.expander("Contact & Information", expanded=False):
         #### 🐛 Report Issues
         Report bugs or contribute: [GitHub Repository](https://github.com/dasguptaindra/SGLT2i-predictor)
         
-        #### 🔬 Model Details
-        - **Algorithm**: Gradient Boosting Classifier
-        - **Features**: 13 molecular descriptors
-        - **Training**: Curated SGLT2 inhibitor dataset
-        - **Purpose**: Research tool for SGLT2 inhibition prediction
-        
         #### ⚠️ Disclaimer
         This tool is for research purposes only. Not for clinical decision making.
         Always validate predictions with experimental data.
