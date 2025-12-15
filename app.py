@@ -324,69 +324,6 @@ if smiles_input:
             # Separator
             st.markdown("---")
 
-            # Feature contributions table
-            with st.expander("📊 Detailed Feature Analysis", expanded=False):
-                if isinstance(shap_values, np.ndarray):
-                    # Create feature contributions dataframe
-                    contrib_df = pd.DataFrame({
-                        'Feature': X_external.columns,
-                        'SHAP Value': shap_values,
-                        'Feature Value': X_external.iloc[0].values
-                    })
-                    contrib_df['Absolute Impact'] = np.abs(contrib_df['SHAP Value'])
-                    contrib_df = contrib_df.sort_values('Absolute Impact', ascending=False)
-                    
-                    # Format for display
-                    display_contrib = contrib_df.copy()
-                    display_contrib['SHAP Value'] = display_contrib['SHAP Value'].round(4)
-                    display_contrib['Feature Value'] = display_contrib['Feature Value'].round(4)
-                    display_contrib['Absolute Impact'] = display_contrib['Absolute Impact'].round(4)
-                    
-                    st.dataframe(
-                        display_contrib,
-                        column_config={
-                            "Feature": st.column_config.TextColumn("Descriptor"),
-                            "SHAP Value": st.column_config.NumberColumn("Contribution"),
-                            "Feature Value": st.column_config.NumberColumn("Value"),
-                            "Absolute Impact": st.column_config.NumberColumn("|Impact|")
-                        },
-                        use_container_width=True
-                    )
-                    
-                    # Summary of top features
-                    st.subheader("Top 3 Influential Features")
-                    for i, (_, row) in enumerate(contrib_df.head(3).iterrows()):
-                        impact_dir = "increases" if row['SHAP Value'] > 0 else "decreases"
-                        st.write(f"**{i+1}. {row['Feature']}** = {row['Feature Value']:.3f}")
-                        st.write(f"   → {impact_dir} probability of being active by {abs(row['SHAP Value']):.4f}")
-
-        except Exception as e:
-            st.error(f"Error in prediction: {str(e)}")
-            
-            # Debug information
-            with st.expander("🔧 Debug Information"):
-                st.write(f"**Error Type:** {type(e).__name__}")
-                st.write(f"**Error Message:** {str(e)}")
-                
-                if 'mol' in locals():
-                    st.write(f"**Molecule valid:** ✓")
-                else:
-                    st.write(f"**Molecule valid:** ✗")
-                
-                # Try to show what descriptors were calculated
-                try:
-                    dummy_mol = Chem.MolFromSmiles("CC")
-                    dummy_desc = calc(dummy_mol)
-                    st.write(f"**Sample Mordred descriptor count:** {len(dummy_desc)}")
-                except:
-                    st.write("**Mordred test failed**")
-    
-    else:
-        st.error("❌ Invalid SMILES string. Please enter a valid SMILES.")
-        st.info("💡 Try example: CC(=O)OC1=CC=CC=C1C(=O)O (Aspirin)")
-else:
-    st.info("👈 Please enter a SMILES string or draw a molecule to get predictions.")
-
 # Contact section
 with st.expander("Contact & Information", expanded=False):
     st.write('''
